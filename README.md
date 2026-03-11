@@ -2,10 +2,11 @@
 
 **Modular Python Geotechnical Analysis Suite — Eurocode 7 (EN 1997-1:2004)**
 
-[![Tests](https://img.shields.io/badge/tests-552%2B%20passing-brightgreen)](tests/)
+[![CI](https://github.com/Kenvesul/DesignApp/actions/workflows/ci.yml/badge.svg)](https://github.com/Kenvesul/DesignApp/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-552%2B%20passing-brightgreen)](https://github.com/Kenvesul/DesignApp/blob/main/tests)
 [![EC7](https://img.shields.io/badge/standard-EC7%20EN%201997--1-blue)](https://eurocodes.jrc.ec.europa.eu/)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/Kenvesul/DesignApp/blob/main/LICENSE)
 
 DesignApp performs five core geotechnical analyses following Eurocode 7 Design Approach 1 (DA1), generates stamped PDF/DOCX calculation sheets, and serves results through both a legacy Jinja2 web interface and a modern React SPA.
 
@@ -31,7 +32,7 @@ All analyses run **DA1 dual-combination** (C1: A1+M1+R1, C2: A2+M2+R1) as requir
 
 ```bash
 # 1. Clone
-git clone https://github.com/your-org/DesignApp.git
+git clone https://github.com/Kenvesul/DesignApp.git
 cd DesignApp
 
 # 2. Install dependencies
@@ -228,6 +229,7 @@ See `deploy/nginx.conf` and `docker-compose.yml` for configuration details.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+> AI-assisted development context is stored in `.claude/CLAUDE_CONTEXT.md`.
 
 ## License
 

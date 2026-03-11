@@ -57,3 +57,38 @@ Thumbs.db
 # ── Logs ─────────────────────────────────────────────────────────────────────
 *.log
 logs/
+
+# ── Append these lines to your existing .gitignore ──────────────────────
+
+# Root-level test file (duplicate of tests/test_app.py — delete the file,
+# or at minimum exclude it from git tracking)
+/test_app.py
+
+# Claude AI session context (moved to .claude/ — root copy no longer needed)
+/CLAUDE_CONTEXT.md
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Flask session files (if using Flask-Session filesystem backend)
+flask_session/
+
+# Environment
+.env
+*.env.local
+
+# React / Node
+react-spa/node_modules/
+react-spa/dist/
+ui/static/dist/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
