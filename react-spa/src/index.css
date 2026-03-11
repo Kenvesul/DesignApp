@@ -67,5 +67,5 @@
            text-gray-800 dark:text-gray-200;
   }
   .result-table tr:last-child td { @apply border-b-0; }
-  .result-table tr:hover td { @apply bg-gray-50 dark:bg-gray-750; }
+  .result-table tr:hover td { @apply bg-gray-50 dark:bg-gray-800; }
 }
