@@ -1,5 +1,9 @@
 name: CI
 
+env:
+  # Opt into Node.js 24 now to avoid deprecation warnings
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches: ["main", "develop"]
@@ -28,16 +32,32 @@ jobs:
           pip install -r requirements-dev.txt
           pip install pytest
 
-      - name: Run all test suites
-        # PYTHONPATH=. ensures "from core.x import y" resolves from project root
+      - name: Show installed packages (debug)
+        run: pip list
+
+      - name: Check test discovery (debug)
         env:
           PYTHONPATH: .
-        run: pytest tests/ -v --tb=short
+        run: pytest tests/ --collect-only -q 2>&1 | head -50
+
+      - name: Run all test suites
+        env:
+          PYTHONPATH: .
+        # --import-mode=importlib handles projects that mix unittest + pytest
+        run: |
+          pytest tests/ \
+            -v \
+            --tb=long \
+            --import-mode=importlib \
+            2>&1
 
       - name: Calibration smoke-test (Craig examples)
         env:
           PYTHONPATH: .
-        run: pytest tests/test_sheet_pile.py tests/test_search.py -v
+        run: |
+          pytest tests/test_sheet_pile.py tests/test_search.py \
+            -v \
+            --import-mode=importlib
 
   # ── 2. React SPA — lint + build ──────────────────────────────────────────
   react-build:
@@ -57,17 +77,26 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install npm dependencies
-        # npm install works with or without a lockfile; npm ci requires one
-        run: npm install
-
-      - name: Warn if package-lock.json is missing
+      - name: Show Node + npm versions (debug)
         run: |
-          if [ ! -f package-lock.json ]; then
-            echo "⚠️  No package-lock.json found — commit it for reproducible builds."
+          node --version
+          npm --version
+
+      - name: Show package.json scripts (debug)
+        run: cat package.json
+
+      - name: Check for lockfile
+        run: |
+          if [ -f package-lock.json ]; then
+            echo "✅ package-lock.json found"
+          else
+            echo "⚠️  No package-lock.json — will generate one"
           fi
 
-      - name: Lint (skip if no lint script defined)
+      - name: Install npm dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Lint (skip if no lint script)
         run: npm run lint --if-present || echo "ℹ️  No lint script — skipping"
 
       - name: Production build
@@ -80,7 +109,7 @@ jobs:
           path: react-spa/dist/
           retention-days: 7
 
-  # ── 3. Docker build (gates on jobs 1+2) ─────────────────────────────────
+  # ── 3. Docker build ───────────────────────────────────────────────────────
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
@@ -118,7 +147,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Install Node dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
         working-directory: react-spa
 
       - name: Install Playwright browsers
@@ -138,7 +167,7 @@ jobs:
         run: npm run dev &
         working-directory: react-spa
 
-      - name: Wait for Vite to be ready
+      - name: Wait for Vite
         run: |
           for i in $(seq 1 20); do
             curl -sf http://127.0.0.1:5173 && break || sleep 1
