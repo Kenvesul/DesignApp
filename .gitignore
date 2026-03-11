@@ -1,0 +1,59 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+*.pyc
+
+# ── Flask / DesignApp runtime ─────────────────────────────────────────────────
+instance/
+*.tmp
+/tmp/
+
+# ── Node / React ──────────────────────────────────────────────────────────────
+react-spa/node_modules/
+react-spa/.vite/
+react-spa/dist/          # Built into ui/static/dist/ instead
+
+# Built React SPA — committed only for production deploy; ignored during dev
+ui/static/dist/
+
+# ── Playwright ────────────────────────────────────────────────────────────────
+playwright-report/
+test-results/
+.playwright/
+
+# ── Environment secrets ───────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── IDE ────────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Generated exports (user-produced, not source) ─────────────────────────────
+*.pdf
+*.docx
+!tests/fixtures/*.pdf
+!tests/fixtures/*.docx
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/

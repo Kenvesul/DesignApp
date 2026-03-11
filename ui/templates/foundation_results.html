@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Foundation Results{% endblock %}
+{% block content %}
+
+{% set passes = result.passes %}
+
+<div class="page-header">
+  <h1>Foundation Bearing Capacity Results</h1>
+  <p>{{ result.soil.name }} · EC7 DA1 · EN 1997-1:2004 Annex D</p>
+</div>
+
+<div class="verdict-banner {{ 'verdict-pass' if passes else 'verdict-fail' }}">
+  <span class="verdict-icon">{{ '✓' if passes else '✗' }}</span>
+  <span class="verdict-label">{{ 'SATISFACTORY' if passes else 'UNSATISFACTORY' }}</span>
+  <span class="verdict-detail">ULS: {{ 'PASS' if result.uls_passes else 'FAIL' }}
+    {% if result.sls_passes is not none %}
+      · SLS: {{ 'PASS' if result.sls_passes else 'FAIL' }}
+    {% endif %}
+  </span>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="kpi-value">{{ result.foundation.B }} m</div><div class="kpi-label">Width B</div></div>
+  <div class="kpi"><div class="kpi-value">{{ result.foundation.B_eff }} m</div><div class="kpi-label">Effective width B'</div></div>
+  <div class="kpi"><div class="kpi-value">{{ result.comb2.Rd }} kN/m</div><div class="kpi-label">R<sub>d</sub> governing (C2)</div></div>
+  <div class="kpi"><div class="kpi-value {{ 'kpi-pass' if result.comb2.passes else 'kpi-fail' }}">{{ result.comb2.utilisation }}</div><div class="kpi-label">Utilisation V<sub>d</sub>/R<sub>d</sub> (C2)</div></div>
+  {% if result.s_immediate_mm is not none %}
+  <div class="kpi"><div class="kpi-value {{ 'kpi-pass' if result.sls_passes else 'kpi-fail' }}">{{ result.s_immediate_mm }} mm</div><div class="kpi-label">Immediate settlement</div></div>
+  {% endif %}
+</div>
+
+<div class="results-grid">
+
+  <section class="result-section">
+    <h2>EC7 DA1 Bearing Resistance  <span class="ref">Annex D</span></h2>
+    <table class="data-table">
+      <thead>
+        <tr><th>Combination</th><th>γ<sub>G</sub></th><th>γ<sub>Q</sub></th><th>V<sub>d</sub> (kN/m)</th><th>R<sub>d</sub> (kN/m)</th><th>Utilisation</th><th>Result</th></tr>
+      </thead>
+      <tbody>
+        {% for c in [result.comb1, result.comb2] %}
+        <tr>
+          <td>{{ c.label }}</td>
+          <td>{{ c.gG }}</td><td>{{ c.gQ }}</td>
+          <td>{{ c.Vd }}</td><td>{{ c.Rd }}</td>
+          <td>{{ c.utilisation }}</td>
+          <td class="{{ 'cell-pass' if c.passes else 'cell-fail' }}">{{ 'PASS ✓' if c.passes else 'FAIL ✗' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="result-section">
+    <h2>Input Summary</h2>
+    <table class="data-table">
+      <tbody>
+        <tr><td>Soil</td><td><strong>{{ result.soil.name }}</strong></td></tr>
+        <tr><td>γ / φ'k / c'k</td><td>{{ result.soil.gamma }} kN/m³ · {{ result.soil.phi_k }}° · {{ result.soil.c_k }} kPa</td></tr>
+        <tr><td>B × L</td><td>{{ result.foundation.B }} × {{ result.foundation.L or '∞ (strip)' }} m</td></tr>
+        <tr><td>Embedment D<sub>f</sub></td><td>{{ result.foundation.Df }} m</td></tr>
+        <tr><td>Effective B'</td><td>{{ result.foundation.B_eff }} m</td></tr>
+        <tr><td>Effective area A'</td><td>{{ result.foundation.A_eff }} m²/m</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  {% if result.s_immediate_mm is not none %}
+  <section class="result-section">
+    <h2>Settlement SLS  <span class="ref">EC7 §6.6 · Craig §7.4</span></h2>
+    <table class="data-table">
+      <tbody>
+        <tr>
+          <td>Immediate settlement s<sub>i</sub></td>
+          <td>{{ result.s_immediate_mm }} mm</td>
+          <td class="cell-note">Steinbrenner / Janbu</td>
+        </tr>
+        {% if result.s_consolidation_mm is not none %}
+        <tr>
+          <td>Consolidation settlement s<sub>c</sub></td>
+          <td>{{ result.s_consolidation_mm }} mm</td>
+          <td class="cell-note">
+            {% if result.layer_breakdown %}
+              {{ result.layer_breakdown | length }} layer(s) · Boussinesq stress
+            {% else %}
+              Single layer · Boussinesq stress
+            {% endif %}
+          </td>
+        </tr>
+        {% endif %}
+        <tr class="row-total">
+          <td><strong>Total settlement s<sub>total</sub></strong></td>
+          <td><strong>{{ result.s_total_mm }} mm</strong></td>
+          <td class="cell-note">s<sub>i</sub> + s<sub>c</sub></td>
+        </tr>
+        <tr>
+          <td>SLS limit s<sub>lim</sub></td>
+          <td>{{ result.s_lim_mm }} mm</td>
+          <td></td>
+        </tr>
+        {% if result.t_95_years is not none %}
+        <tr>
+          <td>Time to 95% consolidation</td>
+          <td>{{ result.t_95_years }} years</td>
+          <td class="cell-note">Terzaghi (governing layer)</td>
+        </tr>
+        {% endif %}
+        <tr>
+          <td>SLS verdict</td>
+          <td colspan="2" class="{{ 'cell-pass' if result.sls_passes else 'cell-fail' }}">
+            {{ 'PASS ✓' if result.sls_passes else 'FAIL ✗' }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    {% if result.layer_breakdown %}
+    <h3>Consolidation by Layer  <span class="ref">Boussinesq / Fadum 1948</span></h3>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Layer</th>
+          <th>H (m)</th>
+          <th>z<sub>mid</sub> (m)</th>
+          <th>Δσ<sub>v</sub> (kPa)</th>
+          <th>s<sub>c</sub> (mm)</th>
+          <th>t<sub>95</sub> (yr)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lay in result.layer_breakdown %}
+        <tr>
+          <td>{{ lay.label }}</td>
+          <td>{{ lay.H_m }}</td>
+          <td>{{ lay.z_mid_m }}</td>
+          <td>{{ lay.delta_sigma }}</td>
+          <td>{{ lay.s_c_mm }}</td>
+          <td>{{ lay.t_95_years if lay.t_95_years is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </section>
+  {% endif %}
+
+</div>
+
+{% if result.warnings %}
+<div class="alert alert-warn">
+  <strong>Warnings:</strong>
+  <ul>{% for w in result.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<!-- B-07: Export buttons (mirrors slope_results.html pattern) -->
+<div class="export-bar">
+  <span class="export-label">Export calculation sheet:</span>
+  <a href="{{ url_for('foundation_export_pdf') }}"  class="btn btn-export">⬇ PDF</a>
+  <a href="{{ url_for('foundation_export_docx') }}" class="btn btn-export">⬇ Word (.docx)</a>
+  <a href="{{ url_for('foundation_export_png') }}"  class="btn btn-export">⬇ Cross-section (PNG)</a>
+  <a href="{{ url_for('foundation_form') }}"        class="btn btn-secondary">← New Analysis</a>
+</div>
+
+{% endblock %}
