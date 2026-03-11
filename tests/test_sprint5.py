@@ -62,7 +62,7 @@ from models.soil          import Soil
 from models.foundation    import Foundation
 from models.wall_geometry import RetainingWall
 from models.surcharge     import UniformSurcharge
-from core.api             import run_wall_analysis, run_foundation_analysis
+from api                  import run_wall_analysis, run_foundation_analysis
 
 
 # ──────────────────────────────────────────────────────────────────────────────
