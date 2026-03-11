@@ -1,7 +1,6 @@
 name: CI
 
 env:
-  # Opt into Node.js 24 now to avoid deprecation warnings
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
@@ -32,32 +31,26 @@ jobs:
           pip install -r requirements-dev.txt
           pip install pytest
 
-      - name: Show installed packages (debug)
-        run: pip list
-
-      - name: Check test discovery (debug)
+      - name: Show what pytest can collect (exposes import errors)
         env:
           PYTHONPATH: .
-        run: pytest tests/ --collect-only -q 2>&1 | head -50
+        run: pytest tests/ --collect-only -q 2>&1 || true
+        # "|| true" keeps this step green so we always see the output
 
       - name: Run all test suites
         env:
           PYTHONPATH: .
-        # --import-mode=importlib handles projects that mix unittest + pytest
         run: |
           pytest tests/ \
             -v \
             --tb=long \
-            --import-mode=importlib \
-            2>&1
+            --import-mode=importlib
 
       - name: Calibration smoke-test (Craig examples)
         env:
           PYTHONPATH: .
         run: |
-          pytest tests/test_sheet_pile.py tests/test_search.py \
-            -v \
-            --import-mode=importlib
+          pytest tests/test_sheet_pile.py tests/test_search.py -v --import-mode=importlib
 
   # ── 2. React SPA — lint + build ──────────────────────────────────────────
   react-build:
@@ -76,22 +69,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-
-      - name: Show Node + npm versions (debug)
-        run: |
-          node --version
-          npm --version
-
-      - name: Show package.json scripts (debug)
-        run: cat package.json
-
-      - name: Check for lockfile
-        run: |
-          if [ -f package-lock.json ]; then
-            echo "✅ package-lock.json found"
-          else
-            echo "⚠️  No package-lock.json — will generate one"
-          fi
 
       - name: Install npm dependencies
         run: npm install --legacy-peer-deps
