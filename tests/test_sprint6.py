@@ -37,7 +37,7 @@ from core.wall_analysis    import (
     R1_SLIDING, R1_BEARING,
     ECCENTRICITY_LIMIT_RATIO,
 )
-from core.api import run_wall_analysis
+from api import run_wall_analysis
 
 
 # ── Shared reference wall (Craig §11 example) ────────────────────────────────

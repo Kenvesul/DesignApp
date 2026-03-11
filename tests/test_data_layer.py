@@ -23,7 +23,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from data.materials import (
+from core.materials import (
     Concrete, ReinforcingSteel,
     CONCRETE_GRADES, STEEL_GRADES,
     get_concrete, get_steel,

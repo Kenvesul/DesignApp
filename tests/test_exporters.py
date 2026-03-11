@@ -38,10 +38,10 @@ from exporters.plot_bishop  import plot_fos_heatmap, save_fos_heatmap
 from exporters.report_pdf   import generate_slope_report
 
 # Sprint 11 — foundation / wall exporters and plot modules
-from plot_foundation        import plot_foundation_bearing, save_foundation_plot
-from plot_wall              import plot_retaining_wall, save_wall_plot
-from report_pdf             import generate_foundation_report, generate_wall_report
-from report_docx            import generate_foundation_report_docx, generate_wall_report_docx
+from exporters.plot_foundation import plot_foundation_bearing, save_foundation_plot
+from exporters.plot_wall import plot_retaining_wall, save_wall_plot
+from exporters.report_pdf import generate_foundation_report, generate_wall_report
+from exporters.report_docx import generate_foundation_report_docx, generate_wall_report_docx
 from api                    import run_foundation_analysis, run_wall_analysis
 
 
@@ -1262,7 +1262,7 @@ def test_generate_project_report_single_analysis():
     print("\n" + "="*60)
     print("  TEST 36 – generate_project_report: single analysis")
     print("="*60)
-    from report_pdf import generate_project_report
+    from exporters.report_pdf import generate_project_report
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "project_single.pdf")
         generate_project_report(
@@ -1294,7 +1294,7 @@ def test_generate_project_report_multi_analysis():
     print("\n" + "="*60)
     print("  TEST 37 – generate_project_report: foundation + wall")
     print("="*60)
-    from report_pdf import generate_project_report
+    from exporters.report_pdf import generate_project_report
     with tempfile.TemporaryDirectory() as tmpdir:
         p1 = os.path.join(tmpdir, "single.pdf")
         p2 = os.path.join(tmpdir, "multi.pdf")
@@ -1319,7 +1319,7 @@ def test_project_report_is_valid_pdf():
     print("\n" + "="*60)
     print("  TEST 38 – generate_project_report: valid PDF, parseable by pypdf")
     print("="*60)
-    from report_pdf import generate_project_report
+    from exporters.report_pdf import generate_project_report
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "project_valid.pdf")
         generate_project_report(
@@ -1358,7 +1358,7 @@ def test_project_report_has_multiple_pages():
     except ImportError:
         print("  SKIP: pypdf not available")
         return
-    from report_pdf import generate_project_report
+    from exporters.report_pdf import generate_project_report
     with tempfile.TemporaryDirectory() as tmpdir:
         path = os.path.join(tmpdir, "project_pages.pdf")
         generate_project_report(

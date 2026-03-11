@@ -32,7 +32,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from seepage import (
+from core.seepage import (
     pore_pressure_from_phreatic,
     ru_at_point,
     dupuit_seepage_flow,
