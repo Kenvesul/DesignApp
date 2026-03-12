@@ -31,26 +31,20 @@ jobs:
           pip install -r requirements-dev.txt
           pip install pytest
 
-      - name: Show what pytest can collect (exposes import errors)
+      - name: Show what pytest can collect
         env:
           PYTHONPATH: .
         run: pytest tests/ --collect-only -q 2>&1 || true
-        # "|| true" keeps this step green so we always see the output
 
       - name: Run all test suites
         env:
           PYTHONPATH: .
-        run: |
-          pytest tests/ \
-            -v \
-            --tb=long \
-            --import-mode=importlib
+        run: pytest tests/ -v --tb=long --import-mode=importlib
 
       - name: Calibration smoke-test (Craig examples)
         env:
           PYTHONPATH: .
-        run: |
-          pytest tests/test_sheet_pile.py tests/test_search.py -v --import-mode=importlib
+        run: pytest tests/test_sheet_pile.py tests/test_search.py -v --import-mode=importlib
 
   # ── 2. React SPA — lint + build ──────────────────────────────────────────
   react-build:
@@ -124,34 +118,55 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Install Node dependencies
-        run: npm install --legacy-peer-deps
         working-directory: react-spa
+        run: npm install --legacy-peer-deps
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Start Flask backend
+      - name: Start Flask backend (no reloader in CI)
         env:
           PYTHONPATH: .
           DESIGNAPP_SECRET: ci-test-secret
+          FLASK_ENV: production       # disables debug reloader
         run: |
-          python -m ui.app &
-          for i in $(seq 1 20); do
-            curl -sf http://127.0.0.1:5000/api/health && break || sleep 1
+          python -m ui.app --no-reload &
+          echo "Waiting for Flask on :5000 ..."
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:5000/api/health > /dev/null; then
+              echo "✅ Flask ready (attempt $i)"
+              break
+            fi
+            echo "  attempt $i/30 — waiting..."
+            sleep 2
           done
+          # Final check — fail loudly if Flask never came up
+          curl -sf http://127.0.0.1:5000/api/health || (echo "❌ Flask never started" && exit 1)
 
       - name: Start Vite dev server
-        run: npm run dev &
         working-directory: react-spa
+        # --host binds Vite to 0.0.0.0 so it's reachable on 127.0.0.1 in CI
+        run: npm run dev -- --host &
 
-      - name: Wait for Vite
+      - name: Wait for Vite on :5173
         run: |
-          for i in $(seq 1 20); do
-            curl -sf http://127.0.0.1:5173 && break || sleep 1
+          echo "Waiting for Vite on :5173 ..."
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:5173 > /dev/null; then
+              echo "✅ Vite ready (attempt $i)"
+              break
+            fi
+            echo "  attempt $i/30 — waiting..."
+            sleep 2
           done
+          # Final check — fail loudly if Vite never came up
+          curl -sf http://127.0.0.1:5173 || (echo "❌ Vite never started" && exit 1)
+
+      - name: Show running processes (debug)
+        run: ps aux | grep -E "vite|flask|python|node" | grep -v grep || true
 
       - name: Run Playwright tests
-        run: npx playwright test
+        run: npx playwright test --reporter=list
 
       - name: Upload report on failure
         uses: actions/upload-artifact@v4
