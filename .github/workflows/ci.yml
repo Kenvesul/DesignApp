@@ -117,9 +117,13 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      - name: Install Node dependencies
+      - name: Install Node dependencies (react-spa)
         working-directory: react-spa
         run: npm install --legacy-peer-deps
+
+      - name: Install root Node dependencies (@playwright/test)
+        # playwright.config.js lives at root — needs its own node_modules
+        run: npm install
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
