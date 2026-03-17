@@ -117,59 +117,23 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      - name: Install Node dependencies (react-spa)
+      - name: Install react-spa dependencies
         working-directory: react-spa
         run: npm install --legacy-peer-deps
 
-      - name: Install root Node dependencies (@playwright/test)
-        # playwright.config.js lives at root — needs its own node_modules
+      - name: Install root dependencies (@playwright/test)
         run: npm install
 
       - name: Install Playwright browsers
+        # Use local binary — avoids global permission errors
         run: node_modules/.bin/playwright install --with-deps chromium
 
-      - name: Start Flask backend (no reloader in CI)
+      - name: Run Playwright tests
+        # playwright.config.js webServer: block starts Flask + Vite automatically.
+        # Do NOT manually start them here — they would conflict on the same ports.
         env:
           PYTHONPATH: .
           DESIGNAPP_SECRET: ci-test-secret
-          FLASK_ENV: production       # disables debug reloader
-        run: |
-          python -m ui.app --no-reload &
-          echo "Waiting for Flask on :5000 ..."
-          for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:5000/api/health > /dev/null; then
-              echo "✅ Flask ready (attempt $i)"
-              break
-            fi
-            echo "  attempt $i/30 — waiting..."
-            sleep 2
-          done
-          # Final check — fail loudly if Flask never came up
-          curl -sf http://127.0.0.1:5000/api/health || (echo "❌ Flask never started" && exit 1)
-
-      - name: Start Vite dev server
-        working-directory: react-spa
-        # --host binds Vite to 0.0.0.0 so it's reachable on 127.0.0.1 in CI
-        run: npm run dev -- --host &
-
-      - name: Wait for Vite on :5173
-        run: |
-          echo "Waiting for Vite on :5173 ..."
-          for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:5173 > /dev/null; then
-              echo "✅ Vite ready (attempt $i)"
-              break
-            fi
-            echo "  attempt $i/30 — waiting..."
-            sleep 2
-          done
-          # Final check — fail loudly if Vite never came up
-          curl -sf http://127.0.0.1:5173 || (echo "❌ Vite never started" && exit 1)
-
-      - name: Show running processes (debug)
-        run: ps aux | grep -E "vite|flask|python|node" | grep -v grep || true
-
-      - name: Run Playwright tests
         run: node_modules/.bin/playwright test --reporter=list
 
       - name: Upload report on failure
