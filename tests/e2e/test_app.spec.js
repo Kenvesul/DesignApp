@@ -44,9 +44,9 @@ test.describe("Navigation", () => {
 // ── Slope Analysis ────────────────────────────────────────────────────────────
 async function fillAndSubmitSlope(page) {
   await page.goto(`${BASE}/slope`);
-  await page.fill('[name="phi"]',    "35");
+  await page.fill('[name="phi_k"]',    "35");
   await page.fill('[name="gamma"]',  "19");
-  await page.fill('[name="cohesion"]',"0");
+  await page.fill('[name="c_k"]',"0");
   await page.fill('[name="ru"]',     "0");
   const submitBtn = page.locator('button[type="submit"]').first();
   await submitBtn.click();
@@ -57,7 +57,7 @@ async function fillAndSubmitSlope(page) {
 test.describe("Slope Analysis", () => {
   test("form loads with default values", async ({ page }) => {
     await page.goto(`${BASE}/slope`);
-    await expect(page.locator('[name="phi"]')).toBeVisible();
+    await expect(page.locator('[name="phi_k"]')).toBeVisible();
   });
 
   test("valid Craig 9.1 input returns FoS ≈ 1.441", async ({ page }) => {
@@ -81,7 +81,7 @@ test.describe("Slope Analysis", () => {
 
   test("invalid input shows error message", async ({ page }) => {
     await page.goto(`${BASE}/slope`);
-    await page.fill('[name="phi"]', "-999");
+    await page.fill('[name="phi_k"]', "-999");
     await page.locator('button[type="submit"]').first().click();
     await expect(page.locator(".text-red-600, [role='alert']").first()).toBeVisible({ timeout: 5000 });
   });
@@ -94,7 +94,7 @@ test.describe("Slope Analysis", () => {
     if (options.length > 1) {
       await picker.selectOption({ index: 1 });
     }
-    await expect(page.locator('[name="phi"]')).not.toHaveValue("0");
+    await expect(page.locator('[name="phi_k"]')).not.toHaveValue("0");
   });
 });
 
@@ -102,12 +102,12 @@ test.describe("Slope Analysis", () => {
 test.describe("Foundation Analysis", () => {
   test("form loads", async ({ page }) => {
     await page.goto(`${BASE}/foundation`);
-    await expect(page.locator('[name="phi"]')).toBeVisible();
+    await expect(page.locator('[name="phi_k"]')).toBeVisible();
   });
 
   test("valid input returns bearing resistance", async ({ page }) => {
     await page.goto(`${BASE}/foundation`);
-    await page.fill('[name="phi"]',    "30");
+    await page.fill('[name="phi_k"]',    "30");
     await page.fill('[name="gamma"]',  "18");
     await page.fill('[name="B"]',       "2");
     await page.fill('[name="Df"]',      "1");
@@ -122,12 +122,12 @@ test.describe("Foundation Analysis", () => {
 test.describe("Wall Analysis", () => {
   test("form loads", async ({ page }) => {
     await page.goto(`${BASE}/wall`);
-    await expect(page.locator('[name="phi"]')).toBeVisible();
+    await expect(page.locator('[name="phi_k"]')).toBeVisible();
   });
 
   test("valid input returns Ka value", async ({ page }) => {
     await page.goto(`${BASE}/wall`);
-    await page.fill('[name="phi"]',   "30");
+    await page.fill('[name="phi_k"]',   "30");
     await page.fill('[name="gamma"]', "18");
     await page.locator('button[type="submit"]').first().click();
     await page.waitForSelector(".badge-pass, .badge-fail", { timeout: 15000 });
@@ -140,12 +140,12 @@ test.describe("Wall Analysis", () => {
 test.describe("Sheet Pile Analysis", () => {
   test("form loads with Craig 12.1 defaults", async ({ page }) => {
     await page.goto(`${BASE}/sheet-pile`);
-    await expect(page.locator('[name="phi"]')).toBeVisible();
+    await expect(page.locator('[name="phi_k"]')).toBeVisible();
   });
 
   test("Craig 12.1 returns correct embedment depth", async ({ page }) => {
     await page.goto(`${BASE}/sheet-pile`);
-    await page.fill('[name="phi"]',      "38");
+    await page.fill('[name="phi_k"]',      "38");
     await page.fill('[name="gamma"]',    "20");
     await page.fill('[name="h_retain"]', "6.0");
 
