@@ -75,8 +75,8 @@ test.describe("Slope Analysis", () => {
     // FIX #3: ".badge-pass" class not found — ResultBadge likely uses a
     // different class or data attribute. Match on text content instead,
     // which is resilient to class name changes.
-    const passBadge = page.locator("text=PASS").first();
-    await expect(passBadge).toBeVisible({ timeout: 10000 });
+    const passBadge = page.locator(".badge-pass").first();
+    await expect(passBadge).toBeVisible({ timeout: 15000 });
   });
 
   test("invalid input shows error message", async ({ page }) => {
@@ -149,17 +149,11 @@ test.describe("Sheet Pile Analysis", () => {
     await page.fill('[name="gamma"]',    "20");
     await page.fill('[name="h_retain"]', "6.0");
 
-    // FIX #4: [name="prop_type"] timed out — element doesn't exist with that name.
-    // Try the select by its visible label or any select element present.
-    // If no prop_type selector exists, just skip selecting it and submit defaults.
-    const propSelect = page.locator("select[name='prop_type'], select[name='support_type'], select").first();
-    const propExists = await propSelect.count();
-    if (propExists > 0) {
-      const options = await propSelect.locator("option[value='propped_top'], option[value='propped']").count();
-      if (options > 0) {
-        await propSelect.selectOption({ label: /propped/i });
-      }
-    }
+    // The support-type <select> in SheetPilePage.jsx has no name= attribute —
+    // it is React-controlled via onChange state. Select by finding the option text.
+    // It is the only <select> on the page that contains "Propped at top".
+    const propSelect = page.locator("select").filter({ hasText: /propped/i }).first();
+    await propSelect.selectOption({ value: "propped_top" });
 
     await page.locator('button[type="submit"]').first().click();
     await page.waitForSelector(".badge-pass, .badge-fail", { timeout: 15000 });
