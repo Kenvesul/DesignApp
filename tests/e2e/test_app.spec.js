@@ -149,7 +149,7 @@ test.describe("Sheet Pile Analysis", () => {
       headers: { "Content-Type": "application/json" },
       data: JSON.stringify({
         phi_k: 38, c_k: 0, gamma: 20,
-        h_retain: 6.0, prop_type: "propped_top",
+        h_retained: 6.0, prop_type: "propped_top",
         delta_deg: 0, surcharge_kpa: 0,
       }),
     });
