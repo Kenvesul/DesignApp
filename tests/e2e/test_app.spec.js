@@ -144,17 +144,21 @@ test.describe("Sheet Pile Analysis", () => {
   });
 
   test("Craig 12.1 returns correct embedment depth", async ({ page }) => {
-    // Call the API directly — avoids React-controlled select interaction issues.
-    // This mirrors how the component submits: JSON POST to /api/sheet-pile/analyse.
+    // Call the API directly with Craig 12.1 inputs
     const resp = await page.request.post("http://127.0.0.1:5000/api/sheet-pile/analyse", {
-      data: {
+      headers: { "Content-Type": "application/json" },
+      data: JSON.stringify({
         phi_k: 38, c_k: 0, gamma: 20,
         h_retain: 6.0, prop_type: "propped_top",
         delta_deg: 0, surcharge_kpa: 0,
-      },
+      }),
     });
-    expect(resp.ok()).toBeTruthy();
+
+    // Log response body to diagnose 400 errors
     const json = await resp.json();
+    console.log("Sheet pile API response:", JSON.stringify(json));
+
+    expect(resp.ok(), `API returned ${resp.status()}: ${JSON.stringify(json)}`).toBeTruthy();
     expect(json.ok).toBe(true);
     // Craig 12.1 DA1-C2: embedment depth = 2.1363 m (tolerance <0.002%)
     const d = json.d_design ?? json.comb2?.d_min;
