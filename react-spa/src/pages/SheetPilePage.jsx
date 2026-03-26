@@ -41,7 +41,7 @@ export default function SheetPilePage() {
     const payload = {
       ...form,
       phi_k: +form.phi_k, c_k: +(form.c_k||0), gamma: +form.gamma,
-      h_retain: +form.h_retain, delta_deg: +(form.delta_deg||0),
+      h_retained: +form.h_retain, delta_deg: +(form.delta_deg||0),
       surcharge_kpa: +(form.surcharge_kpa||0),
     };
     try {
