@@ -1,7 +1,6 @@
 # CLAUDE_CONTEXT.md — DesignApp AI Session Guide
-
+**Version:** 3.0 | **Updated:** 2026-03-25
 **Read this file at the start of every new session.**
-It tells you exactly where the project is, what rules apply, and what to do next.
 
 ---
 
@@ -9,37 +8,43 @@ It tells you exactly where the project is, what rules apply, and what to do next
 
 | Item | Value |
 |---|---|
-| App | DesignApp v2.0 — Modular Geotechnical Analysis Suite |
+| App | DesignApp v2.0 → v3.0 (in progress) |
 | Standard | Eurocode 7 — EN 1997-1:2004 + UK/TR National Annex |
-| Language | Python 3.12 (backend) + React 18 / Vite (frontend) |
-| Test status | **20 suites · 552+ checks · 0 failures** |
-| Roadmap doc | `DesignApp_Roadmap_v4_0.docx` (see project root) |
-| Current phase | **Phase 5 COMPLETE** — React SPA + Polish Phase begins |
+| Backend | Python 3.12 — math engine + Flask API |
+| Web UI | React 18 / Vite (existing, maintained) |
+| Desktop UI | **PySide6** (NEW — Phase 6 target) |
+| Test status | **20 suites · 552+ checks · 0 failures · 18/18 E2E ✅** |
+| CI | GitHub Actions — `.github/workflows/ci.yml` ✅ |
+| Current phase | **Phase 6 begins** — Bug fixes + PySide6 Desktop UI |
 
 ---
 
-## 2. Mandatory Architecture Rules
+## 2. Architecture — THREE valid entry points
 
 ```
-models/ → core/ → api.py → ui/app.py
-                        ↘ react-spa/ (via /api/* HTTP only)
-                ↘ exporters/
+models/ → core/ → api.py ──→ ui/app.py (Flask)  ──→ react-spa/ (browser)
+                        ╰──→ desktop/app.py (PySide6)  ← NEW Phase 6
+                        ╰──→ exporters/ (PDF/DOCX/PNG)
 ```
 
-| Layer | What it contains | Hard rule |
-|---|---|---|
-| `models/` | Dataclasses: Soil, Geometry, Foundation, Pile, SheetPile… | stdlib only; no imports from core/ |
-| `core/` | Math engines: bearing_capacity, limit_equilibrium, pile_capacity… | stdlib + numpy; NO UI, NO reportlab/matplotlib |
-| `api.py` | Public bridge — run_*(), export_*(), validate_*() | Accepts/returns plain dicts only |
-| `exporters/` | report_pdf, report_docx, plot_* | matplotlib + reportlab; NO Flask |
-| `ui/app.py` | Flask routes | Imports ONLY from `from . import api` (ui/api.py shim) |
-| `react-spa/` | React components, hooks, pages | Calls ONLY `/api/*` endpoints; NEVER imports Python |
+### Hard rules per layer
 
-**Violating any of these is a blocking error.**
+| Layer | Rule |
+|---|---|
+| `models/` | stdlib only; NO imports from core/ |
+| `core/` | stdlib + numpy only; NO UI, NO reportlab, NO Qt |
+| `api.py` | Accepts/returns plain dicts only; NO Flask, NO Qt |
+| `exporters/` | matplotlib + reportlab; NO Flask, NO Qt |
+| `ui/app.py` | Flask only; imports ONLY `from . import api` |
+| `react-spa/` | Calls ONLY `/api/*` endpoints |
+| `desktop/` | PySide6 only; imports ONLY `from api import *` — never imports core/ directly |
+
+**The desktop UI must go through api.py exactly like the web UI does.**
+This ensures both frontends are always in sync.
 
 ---
 
-## 3. Import Style — ALWAYS Use Full Package Paths
+## 3. Import Style — ALWAYS full package paths
 
 ```python
 # ✅ CORRECT
@@ -47,23 +52,15 @@ from models.soil import Soil
 from core.bearing_capacity import bearing_capacity_hansen
 from core.seepage import PhreaticSurface
 from exporters.report_pdf import generate_slope_report
-from exporters.plot_wall import plot_retaining_wall
 
-# ❌ WRONG — bare imports break when run as package
+# ❌ WRONG
 from soil import Soil
 from seepage import PhreaticSurface
-from report_pdf import generate_slope_report
 ```
 
 ---
 
-## 4. Full File Inventory (v2.0, 100 files)
-
-See project root `README.md` for the full tree.
-
----
-
-## 5. Calibration Values — Never Break These
+## 4. Calibration Values — NEVER break these
 
 | Analysis | Value | Tolerance | Source |
 |---|---|---|---|
@@ -78,24 +75,77 @@ See project root `README.md` for the full tree.
 
 ---
 
-## 6. Known Issues / Polish Backlog
+## 5. Known Bugs — Fix before new features
 
-| ID | File | Issue | Priority |
-|---|---|---|---|
-| P-01 | `core/seepage.py` | Convergence uses fixed iteration count; no residual-based stopping | LOW |
-| P-02 | `exporters/plot_foundation.py` | Aspect ratio distortion on non-square figures | LOW |
-| P-03 | `react-spa/src/pages/SlopePage.jsx` | No canvas polyline editor for slope profile — textarea only | MEDIUM |
-| P-04 | `react-spa/src/pages/WallPage.jsx` | No live SVG geometry preview | MEDIUM |
-| P-05 | All React pages | No dark mode toggle wired (CSS vars ready, toggle button missing) | LOW |
-| P-06 | `ui/app.py` | Session size can exceed Flask cookie limit for large slope results | MEDIUM |
-| P-07 | `core/limit_equilibrium.py` | Spencer method convergence not tested for very steep slopes (>45°) | MEDIUM |
-| P-08 | All | WCAG 2.1 AA accessibility audit not complete | MEDIUM |
-| P-09 | `react-spa/` | Mobile layout not tested below 768px | LOW |
-| P-10 | `tests/e2e/` | Playwright tests require Flask + Vite running — no CI config yet | ✅ FIXED — see .github/workflows/ci.yml |
+| ID | Severity | File | Issue | Status |
+|---|---|---|---|---|
+| BUG-1 | 🔴 HIGH | `ui/app.py` | Session overflow >4KB — export routes return 404 | **OPEN** |
+| BUG-2 | 🔴 HIGH | `ui/app.py` | Temp file leak — `/tmp` fills indefinitely on exports | **OPEN** |
+| BUG-3 | 🟡 MED | `react-spa/src/pages/SheetPilePage.jsx` | Sends `h_retain` but API expects `h_retained` | **OPEN** |
 
 ---
 
-## 7. Next Session Suggested Starting Point
+## 6. Polish Backlog
+
+| ID | Priority | File | Issue |
+|---|---|---|---|
+| P-01 | LOW | `core/seepage.py` | Fixed iteration count; no residual-based stop |
+| P-02 | LOW | `exporters/plot_foundation.py` | Aspect ratio distortion on non-square figures |
+| P-03 | MED | `react-spa/.../SlopePage.jsx` | No canvas polyline editor — textarea only |
+| P-04 | MED | `react-spa/.../WallPage.jsx` | No live SVG geometry preview |
+| P-05 | LOW | All React pages | Dark mode toggle wired (CSS vars ready) |
+| P-07 | MED | `core/limit_equilibrium.py` | Spencer ValueError not caught in grid search |
+| P-08 | MED | `react-spa/src/` | WCAG 2.1 AA audit incomplete |
+| P-09 | LOW | `react-spa/` | Mobile layout below 768px untested |
+
+---
+
+## 7. Phase 6 — PySide6 Desktop UI
+
+### Why PySide6?
+- HTML graphs have layout/overlap issues reported by user
+- Desktop tool → no browser dependency, no Flask server needed
+- Matplotlib plots embed natively via `FigureCanvasQTAgg` — same plots as exporters
+- `api.py` is called directly (no HTTP) — faster, simpler
+
+### Target file structure
+```
+desktop/
+├── __init__.py
+├── app.py                  ← QApplication entry point
+├── main_window.py          ← QMainWindow + QTabWidget (6 analysis tabs)
+├── widgets/
+│   ├── soil_picker.py      ← QComboBox wrapping /api/soils equiv
+│   ├── result_badge.py     ← QLabel with green/red stylesheet
+│   ├── input_panel.py      ← QFormLayout helper
+│   ├── plot_canvas.py      ← FigureCanvasQTAgg wrapper
+│   └── export_bar.py       ← PDF/DOCX/PNG QPushButton row
+└── pages/
+    ├── slope_page.py       ← QWidget for slope analysis
+    ├── foundation_page.py
+    ├── wall_page.py
+    ├── pile_page.py
+    ├── sheet_pile_page.py
+    └── project_dashboard.py
+```
+
+### PySide6 architecture rules
+- Each page is a `QWidget` subclass
+- Analysis runs in a `QThread` worker — NEVER block the main thread
+- Results displayed via `FigureCanvasQTAgg` (matplotlib) embedded in layout
+- All data flow goes: `QWidget → api.run_*() → dict → update UI`
+- Export buttons call `api.export_*()` directly then `QFileDialog.getSaveFileName()`
+- Dark/light mode via Qt palette — no CSS variables needed
+
+### Dependencies to add to requirements.txt
+```
+PySide6 >= 6.6
+matplotlib >= 3.8   # already present
+```
+
+---
+
+## 8. Session Start Checklist
 
 ```bash
 cd DesignApp/
@@ -104,15 +154,7 @@ python tests/test_sheet_pile.py   # Craig Ex.12.1 calibration
 python tests/test_search.py       # Craig Ex.9.1 slope calibration
 ```
 
----
-
-## 8. Polishing Priorities (What to Work on Next)
-
-1. **P-06** — Session size: store only key numbers in session, not full result dict
-2. **P-03** — Slope canvas editor: interactive polyline on `<canvas>` in SlopePage.jsx
-3. **P-04** — Wall SVG preview: live geometry as inputs change in WallPage.jsx
-4. **P-07** — Spencer convergence: add steep-slope test case
-5. **P-08** — WCAG audit: run axe-core on each React page
+All three must pass before making changes.
 
 ---
 
@@ -125,25 +167,35 @@ DA1-C2 (A2+M2+R1):  γ_φ=1.25  γ_c=1.25  γ_G=1.00  γ_Q=1.30
 
 Design angle:    φ′_d = arctan(tan(φ′_k) / γ_φ)
 Design cohesion: c′_d = c′_k / γ_c
-Governing combination = whichever gives lower resistance / higher demand
+Governing = whichever gives lower resistance / higher demand
 ```
 
 ---
 
-## 10. Flask API Route Map (v2.0)
+## 10. Flask API Route Map (v2.0) — unchanged
 
 ```
 GET  /api/health
 GET  /api/soils
-
-POST /api/slope/analyse
-POST /api/foundation/analyse
-POST /api/wall/analyse
-POST /api/pile/analyse
-POST /api/sheet-pile/analyse
-
-GET  /api/*/export/pdf
-GET  /api/*/export/docx
-GET  /api/*/export/png
+POST /api/slope/analyse        → run_slope_analysis()
+POST /api/foundation/analyse   → run_foundation_analysis()
+POST /api/wall/analyse         → run_wall_analysis()
+POST /api/pile/analyse         → run_pile_analysis()
+POST /api/sheet-pile/analyse   → run_sheet_pile_analysis()
+GET  /api/*/export/pdf|docx|png
 GET/POST /api/project/export/pdf
 ```
+
+---
+
+## 11. CI Status
+
+| Job | Status |
+|---|---|
+| Python Tests (20 suites, 552+ checks) | ✅ |
+| React Build & Lint | ✅ |
+| Docker Build | ✅ |
+| Playwright E2E (18/18) | ✅ |
+
+CI workflow: `.github/workflows/ci.yml`
+Trigger: push to `main` or `develop`, PR to `main`
