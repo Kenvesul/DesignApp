@@ -28,6 +28,7 @@ from matplotlib.patches import Arc, FancyArrowPatch
 
 from models.geometry        import SlopeGeometry, SlipCircle
 from core.search            import SearchResult
+from core.slicer            import _find_circle_slope_intersections
 
 
 # ============================================================
@@ -98,15 +99,14 @@ def plot_slope_stability(
     circ_y = [cy + r * math.sin(t) for t in theta]
 
     # Only plot points that are below the ground surface
-    def _y_at_x(x):
-        v = slope.get_y_at_x(x)
-        return v if v is not None else float("inf")
+    def _ground_y_at_x(x):
+        return slope.get_y_at_x(x)
 
     arc_x, arc_y = [], []
     for px, py in zip(circ_x, circ_y):
-        if x_min <= px <= x_max:
-            ground_y = _y_at_x(px)
-            if py <= ground_y + 0.05:   # tiny tolerance for float comparison
+        if slope.x_min <= px <= slope.x_max:
+            ground_y = _ground_y_at_x(px)
+            if ground_y is not None and py <= ground_y + 0.05:
                 arc_x.append(px)
                 arc_y.append(py)
         else:
@@ -125,18 +125,18 @@ def plot_slope_stability(
     # ── 3. Slice borders ──────────────────────────────────────────────────
     # Find the x-extent of the slip circle intersecting the slope
     # entry point (toe) and exit point (crest)
-    x_entry = cx - r
-    x_exit  = cx + r
-    # Clip to slope extents
-    x_entry = max(x_entry, min(xs))
-    x_exit  = min(x_exit,  max(xs))
+    bounds = _find_circle_slope_intersections(slope, circle)
+    if bounds is not None:
+        x_entry, x_exit = bounds
+    else:
+        x_entry = x_exit = 0.0
 
     if x_exit > x_entry and n_slices > 0:
         dx_slice = (x_exit - x_entry) / n_slices
         for i in range(1, n_slices):
             xi = x_entry + i * dx_slice
             # Top: ground surface
-            y_top = _y_at_x(xi)
+            y_top = _ground_y_at_x(xi)
             # Bottom: circle surface
             disc = r**2 - (xi - cx)**2
             if disc < 0:

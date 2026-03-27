@@ -818,3 +818,102 @@ def generate_wall_report_docx(
             doc.add_paragraph(f"• {w}", style="Normal")
 
     doc.save(filepath)
+
+
+def generate_sheet_pile_report_docx(
+    filepath    : str,
+    analysis    : dict,
+    project     : str = "Untitled Project",
+    job_ref     : str = "—",
+    calc_by     : str = "DesignApp",
+    checked_by  : str = "—",
+) -> None:
+    """
+    Editable Word (.docx) calculation sheet for EC7 DA1 sheet pile analysis.
+    """
+    doc = Document()
+    _apply_normal_style(doc)
+
+    section = doc.sections[0]
+    section.page_width = Cm(21.0)
+    section.page_height = Cm(29.7)
+    section.left_margin = Cm(2.0)
+    section.right_margin = Cm(2.0)
+    section.top_margin = Cm(2.0)
+    section.bottom_margin = Cm(2.0)
+
+    date_str = datetime.date.today().strftime("%d %b %Y")
+    _header_table(doc, project, job_ref, calc_by, checked_by, date_str)
+
+    wall = analysis.get("wall", {})
+
+    _section_heading(doc, "1.  Input Parameters  (EC7 §9)")
+    inp_rows = [
+        ("Wall label", wall.get("label", "Sheet Pile"), ""),
+        ("Retained height h", f"{wall.get('h_retained', '—')}", "m"),
+        ("Support type", wall.get("support", "propped"), ""),
+        ("Prop depth z_prop", f"{wall.get('z_prop', '—')}", "m"),
+        ("Characteristic Ka / Kp", f"{analysis.get('Ka_k', '—')} / {analysis.get('Kp_k', '—')}", "—"),
+    ]
+    tbl = doc.add_table(rows=1 + len(inp_rows), cols=3)
+    tbl.style = "Table Grid"
+    for txt, cell in zip(["Parameter", "Value", "Unit"], tbl.rows[0].cells):
+        _set_cell_bg(cell, _C_HEADER_BG)
+        _cell_para(cell, txt, bold=True, fg=_C_HEADER_FG)
+        _set_cell_borders(cell)
+    for r_idx, (lbl, val, unit) in enumerate(inp_rows, start=1):
+        bg = "EEEEEE" if r_idx % 2 == 0 else "FFFFFF"
+        for txt, cell in zip([lbl, str(val), unit], tbl.rows[r_idx].cells):
+            _set_cell_bg(cell, bg)
+            _cell_para(cell, txt)
+            _set_cell_borders(cell)
+    doc.add_paragraph()
+
+    _section_heading(doc, "2.  EC7 DA1 Results")
+    da1_hdrs = ["Comb", "phi_d (deg)", "Ka_d", "Kp_d", "d_min (m)", "T (kN/m)", "M_max", "Overall"]
+    tbl2 = doc.add_table(rows=3, cols=len(da1_hdrs))
+    tbl2.style = "Table Grid"
+    for txt, cell in zip(da1_hdrs, tbl2.rows[0].cells):
+        _set_cell_bg(cell, _C_HEADER_BG)
+        _cell_para(cell, txt, bold=True, fg=_C_HEADER_FG,
+                   align=WD_ALIGN_PARAGRAPH.CENTER, size_pt=8.0)
+        _set_cell_borders(cell)
+
+    for r_idx, comb in enumerate([analysis.get("comb1", {}), analysis.get("comb2", {})], start=1):
+        bg = "EEEEEE" if r_idx % 2 == 0 else "FFFFFF"
+        is_gov = comb.get("label") == analysis.get("governing")
+        vals = [
+            comb.get("label", "—"),
+            f"{comb.get('phi_d_deg', '—')}",
+            f"{comb.get('Ka_d', '—')}",
+            f"{comb.get('Kp_d', '—')}",
+            f"{comb.get('d_min', '—')}",
+            f"{comb.get('T_k', '—')}",
+            f"{comb.get('M_max', '—')}",
+            "GOV" if is_gov else "",
+        ]
+        for col_i, (txt, cell) in enumerate(zip(vals, tbl2.rows[r_idx].cells)):
+            _set_cell_bg(cell, bg)
+            _cell_para(cell, txt,
+                       bold=(col_i == len(vals) - 1 and bool(txt)),
+                       fg=_C_PASS if col_i == len(vals) - 1 and bool(txt) else None,
+                       align=WD_ALIGN_PARAGRAPH.CENTER, size_pt=8.5)
+            _set_cell_borders(cell)
+    doc.add_paragraph()
+
+    _section_heading(doc, "3.  Verdict")
+    passes = analysis.get("passes", False)
+    verdict = "SATISFACTORY - PASS" if passes else "UNSATISFACTORY - FAIL"
+    vp = doc.add_paragraph()
+    run = vp.add_run(verdict)
+    run.bold = True
+    run.font.size = Pt(14)
+    run.font.color.rgb = RGBColor.from_string(_C_PASS if passes else _C_FAIL)
+    vp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    if analysis.get("warnings"):
+        _section_heading(doc, "Notes / Warnings")
+        for warning in analysis["warnings"]:
+            doc.add_paragraph(f"• {warning}", style="Normal")
+
+    doc.save(filepath)

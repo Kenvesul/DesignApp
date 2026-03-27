@@ -62,3 +62,10 @@ logs/
 # ── Removed files ─────────────────────────────────────────────────────────────
 /test_app.py
 /CLAUDE_CONTEXT.md
+/SESSION_DIARY.md
+/context.md
+/.claude/
+/pytest-cache-files-*/
+/tmp*/
+/_test_export_calc.pdf
+/_test_export_calc.docx

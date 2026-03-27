@@ -200,6 +200,13 @@ def create_slices(
         )
 
     x_start, x_end = bounds
+    x_tol = max((slope.x_max - slope.x_min) * 1e-3, 1e-6)
+    if x_start <= slope.x_min + x_tol or x_end >= slope.x_max - x_tol:
+        raise ValueError(
+            "Boundary-truncated sliding mass: trial circle exits through the "
+            "model boundary. Extend the slope profile or use a different circle."
+        )
+
     slice_width     = (x_end - x_start) / num_slices
     slices: list[Slice] = []
 

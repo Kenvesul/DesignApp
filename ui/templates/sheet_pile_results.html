@@ -1,9 +1,0 @@
-{% extends "base.html" %}
-{% block title %}Sheet Pile Results{% endblock %}
-{% block content %}
-<h1>Sheet Pile Results</h1>
-<p>Status: {{ "PASS" if result.passes else "FAIL" }}</p>
-<p>Governing: {{ result.governing_combination }}</p>
-{% if result.comb1 %}<p>DA1-C1 d_min: {{ result.comb1.d_min | round(4) }} m</p>{% endif %}
-{% if result.comb2 %}<p>DA1-C2 d_min: {{ result.comb2.d_min | round(4) }} m</p>{% endif %}
-{% endblock %}
