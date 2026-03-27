@@ -35,7 +35,7 @@ from models.foundation    import Foundation
 from models.wall_geometry import RetainingWall
 from models.surcharge     import UniformSurcharge
 
-from core.search            import grid_search, SearchResult
+from core.search            import grid_search, SearchResult, _auto_bounds as _search_auto_bounds
 from core.factors_of_safety import verify_slope_da1
 from core.slicer            import create_slices
 from core.limit_equilibrium import bishop_simplified
@@ -72,16 +72,9 @@ def _safe(fn, *args, **kwargs):
 
 
 def _auto_bounds(slope: SlopeGeometry) -> dict:
-    """Auto-derive grid-search bounds from slope geometry (Craig Ch.9 heuristic)."""
-    xs = [p[0] for p in slope.points]
-    ys = [p[1] for p in slope.points]
-    w  = max(xs) - min(xs)
-    h  = max(ys) - min(ys) or 1.0
-    return dict(
-        cx_range=(min(xs) - 0.3*w, max(xs) + 0.3*w),
-        cy_range=(max(ys),          max(ys) + 1.5*h),
-        r_range =(0.4*w,            2.0*w),
-    )
+    """Auto-derive grid-search bounds from the core search heuristic."""
+    cx_range, cy_range, r_range = _search_auto_bounds(slope)
+    return dict(cx_range=cx_range, cy_range=cy_range, r_range=r_range)
 
 
 def _rebuild_search_result(analysis: dict, slope: SlopeGeometry, soil: Soil) -> SearchResult:
@@ -193,7 +186,18 @@ def run_slope_analysis(params: dict) -> dict:
                           n_cx=int(params.get("n_cx",12)),
                           n_cy=int(params.get("n_cy",12)),
                           n_r=int(params.get("n_r",8)), num_slices=ns)
-        ver    = verify_slope_da1(slope, soil, ru=ru)
+        ver    = verify_slope_da1(
+            slope,
+            soil,
+            ru=ru,
+            cx_range=b["cx_range"],
+            cy_range=b["cy_range"],
+            r_range=b["r_range"],
+            n_cx=int(params.get("n_cx", 12)),
+            n_cy=int(params.get("n_cy", 12)),
+            n_r=int(params.get("n_r", 8)),
+            num_slices=ns,
+        )
         slices = create_slices(slope, sr.critical_circle, soil, num_slices=ns)
         circ   = sr.critical_circle
 
@@ -218,6 +222,7 @@ def run_slope_analysis(params: dict) -> dict:
             passes        = ver.passes,
             comb1         = _c(ver.comb1),
             comb2         = _c(ver.comb2),
+            governing_combination = ver.governing.label,
             da2           = dict(
                 label    = ver.da2.label,
                 gamma_R  = ver.da2.gamma_R,
@@ -740,6 +745,28 @@ def export_wall_docx(analysis: dict, out_path: str,
     return out_path
 
 
+def export_sheet_pile_pdf(analysis: dict, out_path: str,
+                          project="DesignApp", job_ref="",
+                          calc_by="", checked_by="") -> str:
+    """Generate PDF calculation sheet for sheet pile analysis → out_path."""
+    from exporters.report_pdf import generate_sheet_pile_report
+    generate_sheet_pile_report(out_path, analysis,
+                               project=project, job_ref=job_ref,
+                               calc_by=calc_by, checked_by=checked_by)
+    return out_path
+
+
+def export_sheet_pile_docx(analysis: dict, out_path: str,
+                           project="DesignApp", job_ref="",
+                           calc_by="", checked_by="") -> str:
+    """Generate Word calculation sheet for sheet pile analysis → out_path."""
+    from exporters.report_docx import generate_sheet_pile_report_docx
+    generate_sheet_pile_report_docx(out_path, analysis,
+                                    project=project, job_ref=job_ref,
+                                    calc_by=calc_by, checked_by=checked_by)
+    return out_path
+
+
 def export_wall_plot_png(analysis: dict, dpi: int = 150) -> bytes:
     """
     Retaining wall cross-section with earth pressure diagram → PNG bytes.
@@ -1082,6 +1109,7 @@ def run_sheet_pile_analysis(params: dict) -> dict:
     Reference:
         Craig §12.2; EC7 §9.7.4; Blum (1931).
     """
+    params = _normalise_sheet_pile_params(params)
     errs = validate_sheet_pile_params(params)
     if errs:
         return {"ok": False, "version": "1.1", "analysis_type": "sheet_pile",
@@ -1095,15 +1123,19 @@ def run_sheet_pile_analysis(params: dict) -> dict:
         z_w_raw  = params.get("z_w")
         z_w      = float(z_w_raw) if z_w_raw is not None else None
         label    = str(params.get("label", "Sheet Pile"))
+        support  = str(params.get("support", "propped"))
 
         # z_prop: stored in SheetPile as depth from top of pile (dredge datum is 0)
         # API input: depth from excavation level, negative = above excavation
         # Default: prop at top of retained soil = -h_retained
-        z_prop_api = float(params.get("z_prop", -h))
+        if support == "propped":
+            z_prop_api = float(params.get("z_prop", -h))
+        else:
+            z_prop_api = None
 
         pile = SheetPile(
             h_retained=h,
-            support="propped",
+            support=support,
             z_prop=z_prop_api,
             label=label,
         )
@@ -1147,6 +1179,7 @@ def run_sheet_pile_analysis(params: dict) -> dict:
                 "label":        label,
                 "h_retained":   h,
                 "z_prop":       z_prop_api,
+                "support":      support,
                 "d_design":     round(res.d_design, 4),
                 "total_length": round(h + res.d_design, 4),
             },
@@ -1155,6 +1188,7 @@ def run_sheet_pile_analysis(params: dict) -> dict:
             "comb1":          _comb_dict(res.comb1),
             "comb2":          _comb_dict(res.comb2),
             "governing":      res.governing.label,
+            "governing_combination": res.governing.label,
             "d_design":       round(res.d_design, 4),
             "T_design":       round(res.T_design, 4),
             "M_max_design":   round(res.M_max_design, 4),
@@ -1176,6 +1210,7 @@ def validate_sheet_pile_params(params: dict) -> list:
 
     Returns a list of error strings (empty = valid).
     """
+    params = _normalise_sheet_pile_params(params)
     errs = []
     for f in ("h_retained", "phi_k", "gamma"):
         if params.get(f) is None or params.get(f) == "":
@@ -1213,3 +1248,40 @@ def validate_sheet_pile_params(params: dict) -> list:
         except (TypeError, ValueError):
             errs.append("z_w must be a number.")
     return errs
+
+
+def _normalise_sheet_pile_params(params: dict | None) -> dict:
+    """
+    Accept legacy UI field names and map them to the canonical API schema.
+
+    This keeps the legacy Jinja form, the React SPA, and api.py aligned while
+    Phase 6 stabilisation is still in progress.
+    """
+    if not params:
+        return {}
+
+    norm = dict(params)
+
+    if norm.get("h_retained") in (None, "") and norm.get("h_retain") not in (None, ""):
+        norm["h_retained"] = norm.get("h_retain")
+    if norm.get("q") in (None, "") and norm.get("surcharge_kpa") not in (None, ""):
+        norm["q"] = norm.get("surcharge_kpa")
+
+    prop_type = norm.get("prop_type")
+    if prop_type and norm.get("support") in (None, ""):
+        norm["support"] = "free" if prop_type == "cantilever" else "propped"
+
+    if prop_type and norm.get("z_prop") in (None, ""):
+        try:
+            h = float(norm["h_retained"])
+        except (KeyError, TypeError, ValueError):
+            return norm
+
+        if prop_type == "cantilever":
+            norm["z_prop"] = None
+        elif prop_type == "propped_mid":
+            norm["z_prop"] = -h / 2.0
+        else:
+            norm["z_prop"] = -h
+
+    return norm
