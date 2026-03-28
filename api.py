@@ -35,7 +35,7 @@ from models.foundation    import Foundation
 from models.wall_geometry import RetainingWall
 from models.surcharge     import UniformSurcharge
 
-from core.search            import grid_search, SearchResult
+from core.search            import grid_search, SearchResult, _auto_bounds as _search_auto_bounds
 from core.factors_of_safety import verify_slope_da1
 from core.slicer            import create_slices
 from core.limit_equilibrium import bishop_simplified
@@ -72,16 +72,69 @@ def _safe(fn, *args, **kwargs):
 
 
 def _auto_bounds(slope: SlopeGeometry) -> dict:
-    """Auto-derive grid-search bounds from slope geometry (Craig Ch.9 heuristic)."""
-    xs = [p[0] for p in slope.points]
-    ys = [p[1] for p in slope.points]
-    w  = max(xs) - min(xs)
-    h  = max(ys) - min(ys) or 1.0
+    """Auto-derive grid-search bounds from the core search heuristic."""
+    cx_range, cy_range, r_range = _search_auto_bounds(slope)
     return dict(
-        cx_range=(min(xs) - 0.3*w, max(xs) + 0.3*w),
-        cy_range=(max(ys),          max(ys) + 1.5*h),
-        r_range =(0.4*w,            2.0*w),
+        cx_range=cx_range,
+        cy_range=cy_range,
+        r_range=r_range,
+        search_zone=dict(
+            xc_min=cx_range[0],
+            xc_max=cx_range[1],
+            yc_min=cy_range[0],
+            yc_max=cy_range[1],
+            r_min=r_range[0],
+            r_max=r_range[1],
+        ),
     )
+
+
+def _search_zone_from_params(params: dict, slope: SlopeGeometry) -> dict:
+    """Build the explicit search-zone payload accepted by core/search.py."""
+    auto = _auto_bounds(slope)["search_zone"]
+    zone = dict(auto)
+
+    alias_pairs = (
+        ("xc_min", "cx_min"),
+        ("xc_max", "cx_max"),
+        ("yc_min", "cy_min"),
+        ("yc_max", "cy_max"),
+        ("r_min", "r_min"),
+        ("r_max", "r_max"),
+    )
+    for canonical, legacy in alias_pairs:
+        value = params.get(canonical)
+        if value in (None, ""):
+            value = params.get(legacy)
+        if value not in (None, ""):
+            zone[canonical] = float(value)
+
+    zone["n_cx"] = int(params.get("n_cx", 12))
+    zone["n_cy"] = int(params.get("n_cy", 12))
+    zone["n_r"] = int(params.get("n_r", 8))
+    return zone
+
+
+def _search_zone_from_analysis(analysis: dict) -> dict | None:
+    zone = analysis.get("search_zone")
+    if zone:
+        return dict(zone)
+
+    cache = analysis.get("search_cache", {})
+    if not cache:
+        return None
+
+    return {
+        "xc_min": cache["cx_range"][0],
+        "xc_max": cache["cx_range"][1],
+        "yc_min": cache["cy_range"][0],
+        "yc_max": cache["cy_range"][1],
+        "r_min": cache["r_range"][0],
+        "r_max": cache["r_range"][1],
+        "n_cx": len(cache.get("cx_values", [])) or 1,
+        "n_cy": len(cache.get("cy_values", [])) or 1,
+        "n_r": len(cache.get("r_values", [])) or 1,
+    }
 
 
 def _rebuild_search_result(analysis: dict, slope: SlopeGeometry, soil: Soil) -> SearchResult:
@@ -93,9 +146,8 @@ def _rebuild_search_result(analysis: dict, slope: SlopeGeometry, soil: Soil) -> 
     one calculation, not hundreds.  The critical circle is identical to the one
     found during the original analysis, so all exports stay consistent.
 
-    The fos_grid is left empty in this reconstruction; it is only needed for the
-    heatmap visualisation, which keeps its own lightweight grid re-run (see
-    export_heatmap_png).
+    Cached search-surface metadata is reused when present so plots and exports
+    stay aligned with the accepted search result.
 
     :param analysis: Serialised result dict from run_slope_analysis().
     :param slope:    Reconstructed SlopeGeometry.
@@ -106,6 +158,8 @@ def _rebuild_search_result(analysis: dict, slope: SlopeGeometry, soil: Soil) -> 
     circ   = SlipCircle(cc_d["cx"], cc_d["cy"], cc_d["r"])
     ru     = analysis.get("ru", 0.0)
     cache  = analysis.get("search_cache", {})
+    search_zone = _search_zone_from_analysis(analysis) or {}
+    search_surface = analysis.get("search_surface", {})
 
     # Re-run Bishop on the single critical circle (not a grid sweep)
     slices = create_slices(slope, circ, soil, num_slices=20)
@@ -115,9 +169,10 @@ def _rebuild_search_result(analysis: dict, slope: SlopeGeometry, soil: Soil) -> 
         critical_circle  = circ,
         fos_min          = analysis.get("fos_char", fos_r.fos),
         best_fos_result  = fos_r,
-        fos_grid         = [],          # not needed for plot / PDF
+        fos_grid         = search_surface.get("fos_grid", []),
         cx_values        = cache.get("cx_values", [cc_d["cx"]]),
         cy_values        = cache.get("cy_values", [cc_d["cy"]]),
+        r_values         = cache.get("r_values", [cc_d["r"]]),
         cx_range         = tuple(cache.get("cx_range", [cc_d["cx"]-1, cc_d["cx"]+1])),
         cy_range         = tuple(cache.get("cy_range", [cc_d["cy"]-1, cc_d["cy"]+1])),
         r_range          = tuple(cache.get("r_range",  [cc_d["r"]*0.8, cc_d["r"]*1.2])),
@@ -125,6 +180,10 @@ def _rebuild_search_result(analysis: dict, slope: SlopeGeometry, soil: Soil) -> 
         n_valid          = cache.get("n_valid", 1),
         method           = analysis.get("method", "bishop_simplified"),
         ru               = ru,
+        warnings         = list(analysis.get("warnings", [])),
+        search_zone      = search_zone,
+        search_diagnostics = dict(analysis.get("search_diagnostics", {})),
+        boundary_warning = analysis.get("boundary_warning"),
     )
 
 
@@ -179,21 +238,27 @@ def run_slope_analysis(params: dict) -> dict:
         kh    = float(params.get("kh", 0.0))   # S4: horizontal seismic coefficient
         kv    = float(params.get("kv", 0.0))   # S4: vertical   seismic coefficient
 
-        b = _auto_bounds(slope)
-        if params.get("cx_min") is not None:
-            b["cx_range"] = (float(params["cx_min"]), float(params["cx_max"]))
-        if params.get("cy_min") is not None:
-            b["cy_range"] = (float(params["cy_min"]), float(params["cy_max"]))
-        if params.get("r_min") is not None:
-            b["r_range"]  = (float(params["r_min"]),  float(params["r_max"]))
-
-        sr  = grid_search(slope, soil, ru=ru,
-                          cx_range=b["cx_range"], cy_range=b["cy_range"],
-                          r_range=b["r_range"],
-                          n_cx=int(params.get("n_cx",12)),
-                          n_cy=int(params.get("n_cy",12)),
-                          n_r=int(params.get("n_r",8)), num_slices=ns)
-        ver    = verify_slope_da1(slope, soil, ru=ru)
+        search_zone = _search_zone_from_params(params, slope)
+        sr  = grid_search(
+            slope,
+            soil,
+            ru=ru,
+            search_zone=search_zone,
+            n_cx=search_zone["n_cx"],
+            n_cy=search_zone["n_cy"],
+            n_r=search_zone["n_r"],
+            num_slices=ns,
+        )
+        ver    = verify_slope_da1(
+            slope,
+            soil,
+            ru=ru,
+            search_zone=search_zone,
+            n_cx=search_zone["n_cx"],
+            n_cy=search_zone["n_cy"],
+            n_r=search_zone["n_r"],
+            num_slices=ns,
+        )
         slices = create_slices(slope, sr.critical_circle, soil, num_slices=ns)
         circ   = sr.critical_circle
 
@@ -218,6 +283,7 @@ def run_slope_analysis(params: dict) -> dict:
             passes        = ver.passes,
             comb1         = _c(ver.comb1),
             comb2         = _c(ver.comb2),
+            governing_combination = ver.governing.label,
             da2           = dict(
                 label    = ver.da2.label,
                 gamma_R  = ver.da2.gamma_R,
@@ -234,19 +300,29 @@ def run_slope_analysis(params: dict) -> dict:
                                    r=round(circ.r,3)),
             method           = sr.best_fos_result.method,
             n_circles_tested = sr.n_circles_tested,
+            boundary_warning = sr.boundary_warning,
+            search_zone      = dict(sr.search_zone),
+            search_diagnostics = dict(sr.search_diagnostics),
+            search_surface   = dict(
+                cx_values=sr.cx_values,
+                cy_values=sr.cy_values,
+                fos_grid=sr.fos_grid,
+            ),
             slices = [dict(x=round(s.x,3), b=round(s.b,3),
+                           width=round(s.b,3), height=round(s.height,3),
                            alpha_deg=round(math.degrees(s.alpha),2),
                            weight=round(s.weight,3)) for s in slices],
             search_cache = dict(
                 cx_values        = sr.cx_values,
                 cy_values        = sr.cy_values,
+                r_values         = sr.r_values,
                 cx_range         = list(sr.cx_range),
                 cy_range         = list(sr.cy_range),
                 r_range          = list(sr.r_range),
                 n_circles_tested = sr.n_circles_tested,
                 n_valid          = sr.n_valid,
             ),
-            warnings = list(ver.warnings),
+            warnings = list(dict.fromkeys(list(ver.warnings) + list(sr.warnings))),
         )
 
     r = _safe(_run)
@@ -297,11 +373,7 @@ def export_heatmap_png(analysis: dict, dpi: int = 120) -> bytes:
     import matplotlib.pyplot as plt
     from exporters.plot_bishop import plot_fos_heatmap
     soil, slope, _ = _rebuild(analysis)
-    ru = analysis.get("ru", 0.0)
-    b  = _auto_bounds(slope)
-    sr = grid_search(slope, soil, ru=ru, cx_range=b["cx_range"],
-                     cy_range=b["cy_range"], r_range=b["r_range"],
-                     n_cx=10, n_cy=10, n_r=6)
+    sr = _rebuild_search_result(analysis, slope, soil)
     fig = plot_fos_heatmap(slope, sr)
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
@@ -321,7 +393,7 @@ def export_pdf(analysis: dict, out_path: str,
     soil, slope, _ = _rebuild(analysis)
     ru     = analysis.get("ru", 0.0)
     sr     = _rebuild_search_result(analysis, slope, soil)
-    ver    = verify_slope_da1(slope, soil, ru=ru)
+    ver    = verify_slope_da1(slope, soil, ru=ru, search_zone=_search_zone_from_analysis(analysis))
     slices = create_slices(slope, sr.critical_circle, soil, num_slices=20)
     generate_slope_report(out_path, soil, slope, sr, ver, slices,
                           ru=ru, project=project, job_ref=job_ref,
@@ -341,7 +413,7 @@ def export_docx(analysis: dict, out_path: str,
     soil, slope, _ = _rebuild(analysis)
     ru     = analysis.get("ru", 0.0)
     sr     = _rebuild_search_result(analysis, slope, soil)
-    ver    = verify_slope_da1(slope, soil, ru=ru)
+    ver    = verify_slope_da1(slope, soil, ru=ru, search_zone=_search_zone_from_analysis(analysis))
     slices = create_slices(slope, sr.critical_circle, soil, num_slices=20)
     generate_slope_report_docx(out_path, soil, slope, sr, ver, slices,
                                ru=ru, project=project, job_ref=job_ref,
@@ -740,6 +812,28 @@ def export_wall_docx(analysis: dict, out_path: str,
     return out_path
 
 
+def export_sheet_pile_pdf(analysis: dict, out_path: str,
+                          project="DesignApp", job_ref="",
+                          calc_by="", checked_by="") -> str:
+    """Generate PDF calculation sheet for sheet pile analysis → out_path."""
+    from exporters.report_pdf import generate_sheet_pile_report
+    generate_sheet_pile_report(out_path, analysis,
+                               project=project, job_ref=job_ref,
+                               calc_by=calc_by, checked_by=checked_by)
+    return out_path
+
+
+def export_sheet_pile_docx(analysis: dict, out_path: str,
+                           project="DesignApp", job_ref="",
+                           calc_by="", checked_by="") -> str:
+    """Generate Word calculation sheet for sheet pile analysis → out_path."""
+    from exporters.report_docx import generate_sheet_pile_report_docx
+    generate_sheet_pile_report_docx(out_path, analysis,
+                                    project=project, job_ref=job_ref,
+                                    calc_by=calc_by, checked_by=checked_by)
+    return out_path
+
+
 def export_wall_plot_png(analysis: dict, dpi: int = 150) -> bytes:
     """
     Retaining wall cross-section with earth pressure diagram → PNG bytes.
@@ -1082,6 +1176,7 @@ def run_sheet_pile_analysis(params: dict) -> dict:
     Reference:
         Craig §12.2; EC7 §9.7.4; Blum (1931).
     """
+    params = _normalise_sheet_pile_params(params)
     errs = validate_sheet_pile_params(params)
     if errs:
         return {"ok": False, "version": "1.1", "analysis_type": "sheet_pile",
@@ -1095,15 +1190,19 @@ def run_sheet_pile_analysis(params: dict) -> dict:
         z_w_raw  = params.get("z_w")
         z_w      = float(z_w_raw) if z_w_raw is not None else None
         label    = str(params.get("label", "Sheet Pile"))
+        support  = str(params.get("support", "propped"))
 
         # z_prop: stored in SheetPile as depth from top of pile (dredge datum is 0)
         # API input: depth from excavation level, negative = above excavation
         # Default: prop at top of retained soil = -h_retained
-        z_prop_api = float(params.get("z_prop", -h))
+        if support == "propped":
+            z_prop_api = float(params.get("z_prop", -h))
+        else:
+            z_prop_api = None
 
         pile = SheetPile(
             h_retained=h,
-            support="propped",
+            support=support,
             z_prop=z_prop_api,
             label=label,
         )
@@ -1147,6 +1246,7 @@ def run_sheet_pile_analysis(params: dict) -> dict:
                 "label":        label,
                 "h_retained":   h,
                 "z_prop":       z_prop_api,
+                "support":      support,
                 "d_design":     round(res.d_design, 4),
                 "total_length": round(h + res.d_design, 4),
             },
@@ -1155,6 +1255,7 @@ def run_sheet_pile_analysis(params: dict) -> dict:
             "comb1":          _comb_dict(res.comb1),
             "comb2":          _comb_dict(res.comb2),
             "governing":      res.governing.label,
+            "governing_combination": res.governing.label,
             "d_design":       round(res.d_design, 4),
             "T_design":       round(res.T_design, 4),
             "M_max_design":   round(res.M_max_design, 4),
@@ -1176,6 +1277,7 @@ def validate_sheet_pile_params(params: dict) -> list:
 
     Returns a list of error strings (empty = valid).
     """
+    params = _normalise_sheet_pile_params(params)
     errs = []
     for f in ("h_retained", "phi_k", "gamma"):
         if params.get(f) is None or params.get(f) == "":
@@ -1213,3 +1315,40 @@ def validate_sheet_pile_params(params: dict) -> list:
         except (TypeError, ValueError):
             errs.append("z_w must be a number.")
     return errs
+
+
+def _normalise_sheet_pile_params(params: dict | None) -> dict:
+    """
+    Accept legacy UI field names and map them to the canonical API schema.
+
+    This keeps the legacy Jinja form, the React SPA, and api.py aligned while
+    Phase 6 stabilisation is still in progress.
+    """
+    if not params:
+        return {}
+
+    norm = dict(params)
+
+    if norm.get("h_retained") in (None, "") and norm.get("h_retain") not in (None, ""):
+        norm["h_retained"] = norm.get("h_retain")
+    if norm.get("q") in (None, "") and norm.get("surcharge_kpa") not in (None, ""):
+        norm["q"] = norm.get("surcharge_kpa")
+
+    prop_type = norm.get("prop_type")
+    if prop_type and norm.get("support") in (None, ""):
+        norm["support"] = "free" if prop_type == "cantilever" else "propped"
+
+    if prop_type and norm.get("z_prop") in (None, ""):
+        try:
+            h = float(norm["h_retained"])
+        except (KeyError, TypeError, ValueError):
+            return norm
+
+        if prop_type == "cantilever":
+            norm["z_prop"] = None
+        elif prop_type == "propped_mid":
+            norm["z_prop"] = -h / 2.0
+        else:
+            norm["z_prop"] = -h
+
+    return norm

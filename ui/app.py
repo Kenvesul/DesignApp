@@ -4,43 +4,37 @@ ui/app.py
 Flask web application for DesignApp v2.0.
 
 ARCHITECTURE RULE:
-    This module ONLY imports from . (ui/api.py) — never from core/ or models/.
+    This module ONLY imports from . (ui/api.py) - never from core/ or models/.
     All math is delegated to api.py which acts as the sole bridge.
 
-Routes (Jinja2 — legacy, kept active during React transition)
+Routes (Jinja2)
 ------
-GET  /                          → Home page / React SPA entry
-GET  /slope                     → Slope stability input form
-POST /slope/analyse             → Run analysis, return results page
-GET  /slope/export/pdf          → Download PDF calculation sheet
-GET  /slope/export/docx         → Download Word calculation sheet
-GET  /slope/export/png          → Download cross-section PNG
-GET  /foundation                → Foundation analysis input form
-POST /foundation/analyse        → Run foundation analysis
-GET  /foundation/export/pdf     → Download PDF foundation report
-GET  /foundation/export/docx    → Download Word foundation report
-GET  /foundation/export/png     → Download foundation PNG
-GET  /wall                      → Retaining wall input form
-POST /wall/analyse              → Run wall analysis
-GET  /wall/export/pdf           → Download PDF wall report
-GET  /wall/export/docx          → Download Word wall report
-GET  /wall/export/png           → Download wall PNG
-GET  /sheet-pile                → Sheet pile input form
-POST /sheet-pile/analyse        → Run sheet pile analysis        [B-14]
-GET  /sheet-pile/export/pdf     → Download PDF sheet pile report
-GET  /sheet-pile/export/docx    → Download Word sheet pile report
-GET  /project/export/pdf        → Unified project PDF (all types) [B-14]
+GET  /                          -> Home page / React SPA entry
+GET  /foundation                -> Foundation analysis input form
+POST /foundation/analyse        -> Run foundation analysis
+GET  /foundation/export/pdf     -> Download PDF foundation report
+GET  /foundation/export/docx    -> Download Word foundation report
+GET  /foundation/export/png     -> Download foundation PNG
+GET  /wall                      -> Retaining wall input form
+POST /wall/analyse              -> Run wall analysis
+GET  /wall/export/pdf           -> Download PDF wall report
+GET  /wall/export/docx          -> Download Word wall report
+GET  /wall/export/png           -> Download wall PNG
+GET  /sheet-pile                -> Sheet pile input form
+POST /sheet-pile/analyse        -> Run sheet pile analysis
+GET  /sheet-pile/export/pdf     -> Download PDF sheet pile report
+GET  /sheet-pile/export/docx    -> Download Word sheet pile report
+GET  /project/export/pdf        -> Unified project PDF
 
-JSON API Routes (Sprint 14-16 — React SPA communication)
+JSON API Routes
 ---------
-GET  /api/health                → {"status":"ok","app":"DesignApp","version":"2.0"}
-GET  /api/soils                 → JSON soil library list
-POST /api/slope/analyse         → JSON slope analysis result      [S14]
-POST /api/foundation/analyse    → JSON foundation analysis result [S15]
-POST /api/wall/analyse          → JSON wall analysis result       [S15]
-POST /api/pile/analyse          → JSON pile analysis result       [S15]
-POST /api/sheet-pile/analyse    → JSON sheet pile analysis result [S15]
-GET  /api/project/export/pdf    → Unified PDF (from JSON body)    [S16]
+GET  /api/health                -> {"status":"ok","app":"DesignApp","version":"2.0"}
+GET  /api/soils                 -> JSON soil library list
+POST /api/foundation/analyse    -> JSON foundation analysis result
+POST /api/wall/analyse          -> JSON wall analysis result
+POST /api/pile/analyse          -> JSON pile analysis result
+POST /api/sheet-pile/analyse    -> JSON sheet pile analysis result
+GET  /api/project/export/pdf    -> Unified PDF (from JSON body)
 """
 
 from __future__ import annotations
@@ -88,21 +82,17 @@ def _send_temp_file(path: str, download_name: str, mimetype: str):
 
     BUG-2 fix: export routes used send_file() with delete=False, which leaves
     temp files on disk forever. On a busy server /tmp fills indefinitely.
-    Flask's after_this_request hook runs after the response is streamed,
-    so the file is still readable by send_file() but cleaned up immediately
-    after delivery.
+    The exporter has already finished writing the file by the time we reach this
+    helper, so reading it into memory and deleting it immediately is the most
+    reliable cross-platform cleanup strategy.
     """
-    import flask as _flask
-
-    @_flask.after_this_request
-    def _cleanup(response):
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
-        return response
-
-    return send_file(path, as_attachment=True,
+    with open(path, "rb") as fh:
+        payload = fh.read()
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+    return send_file(io.BytesIO(payload), as_attachment=True,
                      download_name=download_name,
                      mimetype=mimetype)
 
@@ -159,44 +149,6 @@ def _cos_deg(x):
 
 
 # ── Form parsers ─────────────────────────────────────────────────────────────
-
-def _parse_slope_points(raw: str) -> list:
-    """
-    Parse slope points from textarea input.
-    Accepts lines like:  0,3   or   0 3   or   (0, 3)
-    Returns list of [x, y] pairs.
-    """
-    points = []
-    for line in raw.strip().splitlines():
-        line = line.replace("(", "").replace(")", "").replace(";", ",")
-        parts = line.replace(",", " ").split()
-        if len(parts) >= 2:
-            try:
-                points.append([float(parts[0]), float(parts[1])])
-            except ValueError:
-                pass
-    return points
-
-
-def _form_to_slope_params(form) -> dict:
-    """Extract and coerce slope analysis parameters from a Flask form."""
-    return dict(
-        soil_name  = form.get("soil_name", "Soil"),
-        gamma      = form.get("gamma"),
-        phi_k      = form.get("phi_k"),
-        c_k        = form.get("c_k", "0"),
-        ru         = form.get("ru", "0"),
-        slope_points = _parse_slope_points(form.get("slope_points", "")),
-        n_cx       = form.get("n_cx", "12"),
-        n_cy       = form.get("n_cy", "12"),
-        n_r        = form.get("n_r",  "8"),
-        num_slices = form.get("num_slices", "20"),
-        project    = form.get("project", "DesignApp"),
-        job_ref    = form.get("job_ref", ""),
-        calc_by    = form.get("calc_by", ""),
-        checked_by = form.get("checked_by", ""),
-    )
-
 
 def _form_to_foundation_params(form) -> dict:
     """Extract and coerce foundation analysis parameters from a Flask form."""
@@ -266,10 +218,10 @@ def _form_to_sheet_pile_params(form) -> dict:
         phi_k      = form.get("phi_k"),
         c_k        = form.get("c_k", "0"),
         gamma      = form.get("gamma"),
-        h_retain   = form.get("h_retain"),
+        h_retained = form.get("h_retain"),
         prop_type  = form.get("prop_type", "propped_top"),
         delta_deg  = form.get("delta_deg", "0"),
-        surcharge_kpa = form.get("surcharge_kpa", "0"),
+        q          = form.get("surcharge_kpa", "0"),
         project    = form.get("project", "DesignApp"),
         job_ref    = form.get("job_ref", ""),
         calc_by    = form.get("calc_by", ""),
@@ -300,75 +252,6 @@ def index():
 
 
 # ── Slope stability ───────────────────────────────────────────────────────────
-
-@app.route("/slope")
-def slope_form():
-    return render_template("slope_form.html", soils=api.get_soil_library())
-
-
-@app.route("/slope/analyse", methods=["POST"])
-def slope_analyse():
-    params = _form_to_slope_params(request.form)
-    errors = api.validate_slope_params(params)
-    if errors:
-        return render_template("slope_form.html",
-                               soils=api.get_soil_library(),
-                               errors=errors, prev=request.form)
-    result = api.run_slope_analysis(params)
-    if not result.get("ok"):
-        return render_template("slope_form.html",
-                               soils=api.get_soil_library(),
-                               errors=[result.get("error", "Unknown error")],
-                               prev=request.form)
-    try:
-        png_bytes = api.export_slope_plot_png(result, dpi=100)
-        plot_b64  = base64.b64encode(png_bytes).decode("ascii")
-    except Exception:
-        plot_b64 = None
-
-    session["last_slope"]      = _slim_for_session(result)
-    session["last_project"]    = params.get("project", "DesignApp")
-    session["last_job_ref"]    = params.get("job_ref", "")
-    session["last_calc_by"]    = params.get("calc_by", "")
-    session["last_checked_by"] = params.get("checked_by", "")
-    return render_template("slope_results.html", result=result, plot_b64=plot_b64)
-
-
-@app.route("/slope/export/pdf")
-def slope_export_pdf():
-    result = session.get("last_slope")
-    if not result:
-        return redirect(url_for("slope_form"))
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
-        path = f.name
-    api.export_pdf(result, path, **_meta_from_session("last_"))
-    return _send_temp_file(path, "slope_stability.pdf", "application/pdf")
-
-
-@app.route("/slope/export/docx")
-def slope_export_docx():
-    result = session.get("last_slope")
-    if not result:
-        return redirect(url_for("slope_form"))
-    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
-        path = f.name
-    api.export_docx(result, path, **_meta_from_session("last_"))
-    return _send_temp_file(path, "slope_stability.docx",
-                           "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-
-
-@app.route("/slope/export/png")
-def slope_export_png():
-    result = session.get("last_slope")
-    if not result:
-        return redirect(url_for("slope_form"))
-    png = api.export_slope_plot_png(result, dpi=150)
-    return send_file(io.BytesIO(png), as_attachment=True,
-                     download_name="slope_section.png",
-                     mimetype="image/png")
-
-
-# ── Foundation ────────────────────────────────────────────────────────────────
 
 @app.route("/foundation")
 def foundation_form():
@@ -532,7 +415,7 @@ def sheet_pile_export_pdf():
         return redirect(url_for("sheet_pile_form"))
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
         path = f.name
-    api.export_wall_pdf(result, path, **_meta_from_session("sp_"))
+    api.export_sheet_pile_pdf(result, path, **_meta_from_session("sp_"))
     return _send_temp_file(path, "sheet_pile.pdf", "application/pdf")
 
 
@@ -543,7 +426,7 @@ def sheet_pile_export_docx():
         return redirect(url_for("sheet_pile_form"))
     with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
         path = f.name
-    api.export_wall_docx(result, path, **_meta_from_session("sp_"))
+    api.export_sheet_pile_docx(result, path, **_meta_from_session("sp_"))
     return _send_temp_file(path, "sheet_pile.docx",
                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
@@ -559,7 +442,7 @@ def project_export_pdf():
     EC7 §2.1 — the calculation sheet must cover all analysis types submitted.
     """
     analyses = []
-    for key in ("last_slope", "last_foundation", "last_wall", "last_sheet_pile"):
+    for key in ("last_foundation", "last_wall", "last_sheet_pile"):
         a = session.get(key)
         if a and a.get("ok"):
             analyses.append(a)
@@ -570,8 +453,7 @@ def project_export_pdf():
         path = f.name
 
     # Use first available metadata set
-    meta = (_meta_from_session("last_") if session.get("last_slope") else
-            _meta_from_session("fdn_")  if session.get("last_foundation") else
+    meta = (_meta_from_session("fdn_")  if session.get("last_foundation") else
             _meta_from_session("wall_") if session.get("last_wall") else
             _meta_from_session("sp_"))
 
@@ -591,7 +473,6 @@ def api_health():
         "app":     "DesignApp",
         "version": "2.0",
         "session": {
-            "slope":       bool(session.get("last_slope")),
             "foundation":  bool(session.get("last_foundation")),
             "wall":        bool(session.get("last_wall")),
             "sheet_pile":  bool(session.get("last_sheet_pile")),
@@ -603,34 +484,6 @@ def api_health():
 def api_soils():
     """Return soil library as JSON."""
     return jsonify(api.get_soil_library())
-
-
-@app.route("/api/slope/analyse", methods=["POST"])
-def api_slope_analyse():
-    """
-    JSON endpoint for slope stability analysis (Sprint 14 — React SPA).
-
-    Accepts: application/json with slope analysis parameters.
-    Returns: full analysis result dict (same schema as run_slope_analysis).
-
-    EC7 DA1 dual-combination, Bishop simplified (Bishop 1955).
-    """
-    params = request.get_json(force=True) or {}
-    # Convert slope_points from JSON list if given as string in form encoding
-    if isinstance(params.get("slope_points"), str):
-        params["slope_points"] = _parse_slope_points(params["slope_points"])
-    errors = api.validate_slope_params(params)
-    if errors:
-        return jsonify({"ok": False, "errors": errors}), 400
-    result = api.run_slope_analysis(params)
-    if result.get("ok"):
-        # Stash in session so export routes work from the React client too
-        session["last_slope"]      = _slim_for_session(result)
-        session["last_project"]    = params.get("project", "DesignApp")
-        session["last_job_ref"]    = params.get("job_ref", "")
-        session["last_calc_by"]    = params.get("calc_by", "")
-        session["last_checked_by"] = params.get("checked_by", "")
-    return jsonify(result)
 
 
 @app.route("/api/foundation/analyse", methods=["POST"])
@@ -726,9 +579,11 @@ def api_project_export_pdf():
         meta     = body.get("meta", {})
     else:
         analyses = [session[k] for k in
-                    ("last_slope", "last_foundation", "last_wall", "last_sheet_pile")
+                    ("last_foundation", "last_wall", "last_sheet_pile")
                     if session.get(k) and session[k].get("ok")]
-        meta = _meta_from_session("last_")
+        meta = (_meta_from_session("fdn_") if session.get("last_foundation") else
+                _meta_from_session("wall_") if session.get("last_wall") else
+                _meta_from_session("sp_"))
 
     if not analyses:
         return jsonify({"ok": False, "error": "No completed analyses in session"}), 400
@@ -740,39 +595,6 @@ def api_project_export_pdf():
 
 
 # ── Export routes accessible from React client (use session) ─────────────────
-
-@app.route("/api/slope/export/pdf")
-def api_slope_export_pdf():
-    result = session.get("last_slope")
-    if not result:
-        return jsonify({"ok": False, "error": "No slope analysis in session"}), 404
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
-        path = f.name
-    api.export_pdf(result, path, **_meta_from_session("last_"))
-    return _send_temp_file(path, "slope_stability.pdf", "application/pdf")
-
-
-@app.route("/api/slope/export/docx")
-def api_slope_export_docx():
-    result = session.get("last_slope")
-    if not result:
-        return jsonify({"ok": False, "error": "No slope analysis in session"}), 404
-    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
-        path = f.name
-    api.export_docx(result, path, **_meta_from_session("last_"))
-    return _send_temp_file(path, "slope_stability.docx",
-                           "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-
-
-@app.route("/api/slope/export/png")
-def api_slope_export_png():
-    result = session.get("last_slope")
-    if not result:
-        return jsonify({"ok": False, "error": "No slope analysis in session"}), 404
-    png = api.export_slope_plot_png(result, dpi=150)
-    return send_file(io.BytesIO(png), as_attachment=True,
-                     download_name="slope_section.png", mimetype="image/png")
-
 
 @app.route("/api/foundation/export/pdf")
 def api_foundation_export_pdf():
@@ -838,6 +660,29 @@ def api_wall_export_png():
     png = api.export_wall_plot_png(result, dpi=150)
     return send_file(io.BytesIO(png), as_attachment=True,
                      download_name="retaining_wall_section.png", mimetype="image/png")
+
+
+@app.route("/api/sheet-pile/export/pdf")
+def api_sheet_pile_export_pdf():
+    result = session.get("last_sheet_pile")
+    if not result:
+        return jsonify({"ok": False, "error": "No sheet pile analysis in session"}), 404
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+        path = f.name
+    api.export_sheet_pile_pdf(result, path, **_meta_from_session("sp_"))
+    return _send_temp_file(path, "sheet_pile.pdf", "application/pdf")
+
+
+@app.route("/api/sheet-pile/export/docx")
+def api_sheet_pile_export_docx():
+    result = session.get("last_sheet_pile")
+    if not result:
+        return jsonify({"ok": False, "error": "No sheet pile analysis in session"}), 404
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+        path = f.name
+    api.export_sheet_pile_docx(result, path, **_meta_from_session("sp_"))
+    return _send_temp_file(path, "sheet_pile.docx",
+                           "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

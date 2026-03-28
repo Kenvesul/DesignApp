@@ -1,120 +1,86 @@
-"""
-plot_bishop.py -- FoS grid heatmap from a Bishop/Ordinary circle search.
+"""FoS heatmap plot helpers for the slope search surface."""
 
-Renders a 2-D colour contour map of FoS values over the (cx, cy) search grid,
-with the critical circle marked.  Intended for QA/audit purposes so engineers
-can verify the search converged and did not miss a lower FoS.
-
-Reference:
-    Bishop, A.W. (1955) -- critical circle location methodology.
-    Craig's Soil Mechanics, 9th ed., Chapter 9 (FoS contour plots).
-
-Axes:
-    x -- circle centre x-coordinate (m)
-    y -- circle centre y-coordinate (m)
-    colour -- FoS value at each (cx, cy) point
-
-Units:
-    All spatial inputs in metres (m).  FoS dimensionless.
-"""
+from __future__ import annotations
 
 import math
+
 import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 
-from models.geometry        import SlopeGeometry, SlipCircle
-from models.soil            import Soil
-from core.search            import SearchResult, grid_search
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+from core.search import SearchResult
+from models.geometry import SlopeGeometry
+
+
+def _coerce_result(soil_or_result, result: SearchResult | None) -> SearchResult:
+    """
+    Backward-compatible argument handling.
+
+    Old signature:
+        plot_fos_heatmap(slope, soil, result, ...)
+    New signature:
+        plot_fos_heatmap(slope, result, ...)
+    """
+    if result is not None:
+        return result
+    if isinstance(soil_or_result, SearchResult):
+        return soil_or_result
+    raise TypeError("plot_fos_heatmap() requires a SearchResult.")
+
+
+def _materialize_grid(result: SearchResult) -> np.ndarray:
+    grid = np.asarray(result.fos_grid, dtype=float)
+    if grid.size == 0:
+        raise ValueError("SearchResult does not contain a FoS grid.")
+    return grid
 
 
 def plot_fos_heatmap(
-    slope       : SlopeGeometry,
-    soil        : Soil,
-    result      : SearchResult,
-    ru          : float = 0.0,
-    n_cx        : int   = 30,
-    n_cy        : int   = 25,
-    title       : str   = "FoS Heatmap — Bishop Simplified",
-    figsize     : tuple = (10, 7),
-    fos_clip    : float = 3.0,
+    slope: SlopeGeometry,
+    soil_or_result,
+    result: SearchResult | None = None,
+    ru: float = 0.0,
+    n_cx: int | None = None,
+    n_cy: int | None = None,
+    title: str = "FoS Heatmap - Bishop Simplified",
+    figsize: tuple = (10, 7),
+    fos_clip: float = 3.0,
 ) -> plt.Figure:
-    """
-    Renders a FoS heatmap over the cx-cy search grid used by grid_search().
+    """Render a FoS heatmap from an existing SearchResult surface."""
+    search_result = _coerce_result(soil_or_result, result)
+    fos_grid = _materialize_grid(search_result)
+    cx_values = np.asarray(search_result.cx_values, dtype=float)
+    cy_values = np.asarray(search_result.cy_values, dtype=float)
 
-    Recomputes FoS over a uniform (cx, cy) grid centred on the critical circle
-    from ``result``.  The grid spans ±radius around the critical centre so that
-    the minimum is always visible.
+    masked = np.ma.masked_invalid(np.clip(fos_grid, None, fos_clip))
+    if masked.count() == 0:
+        raise ValueError("SearchResult FoS grid contains no finite values.")
 
-    :param slope:     SlopeGeometry defining the ground surface.
-    :param soil:      Soil used for the stability analysis.
-    :param result:    SearchResult containing the critical circle.
-    :param ru:        Pore pressure ratio (dimensionless).
-    :param n_cx:      Number of grid points in the cx direction.
-    :param n_cy:      Number of grid points in the cy direction.
-    :param title:     Figure title.
-    :param figsize:   Figure size (width, height) in inches.
-    :param fos_clip:  Maximum FoS value shown (higher values clipped for contrast).
-    :return:          matplotlib Figure.
-    """
-    from core.limit_equilibrium import bishop_simplified
-    from core.slicer            import create_slices
-
-    crit   = result.critical_circle
-    r_span = crit.r
-
-    cx_min = crit.cx - r_span * 0.8
-    cx_max = crit.cx + r_span * 0.8
-    cy_min = crit.cy - r_span * 0.6
-    cy_max = crit.cy + r_span * 0.6
-
-    cx_vals = np.linspace(cx_min, cx_max, n_cx)
-    cy_vals = np.linspace(cy_min, cy_max, n_cy)
-
-    fos_grid = np.full((n_cy, n_cx), np.nan)
-
-    for i, cy in enumerate(cy_vals):
-        for j, cx in enumerate(cx_vals):
-            r = math.hypot(crit.cx - cx, crit.cy - cy)
-            r = max(r, crit.r * 0.5)   # keep radius reasonable
-            # Use critical radius offset from each point
-            r_try = crit.r
-            circ = SlipCircle(cx, cy, r_try)
-            try:
-                slices = create_slices(slope, circ, n_slices=20)
-                if len(slices) < 3:
-                    continue
-                res = bishop_simplified(slices, soil.phi_d(), soil.c_d(), ru=ru)
-                fos_grid[i, j] = min(res.fos, fos_clip)
-            except Exception:
-                pass
-
+    cx_mesh, cy_mesh = np.meshgrid(cx_values, cy_values)
     fig, ax = plt.subplots(figsize=figsize)
 
-    CX, CY = np.meshgrid(cx_vals, cy_vals)
-    masked = np.ma.masked_invalid(fos_grid)
+    finite_min = float(masked.min())
+    level_min = max(0.5, min(finite_min, fos_clip))
+    levels = np.linspace(level_min, fos_clip, 20)
 
-    levels = np.linspace(max(0.5, float(np.nanmin(fos_grid)) * 0.9 if not np.all(np.isnan(fos_grid)) else 0.5),
-                         fos_clip, 20)
-    cf = ax.contourf(CX, CY, masked, levels=levels, cmap="RdYlGn", extend="both")
-    cs = ax.contour( CX, CY, masked, levels=levels, colors="black", linewidths=0.3, alpha=0.4)
-    ax.clabel(cs, levels[::4], inline=True, fontsize=7, fmt="%.2f")
+    contour = ax.contourf(cx_mesh, cy_mesh, masked, levels=levels, cmap="RdYlGn", extend="both")
+    isolines = ax.contour(cx_mesh, cy_mesh, masked, levels=levels, colors="black", linewidths=0.3, alpha=0.4)
+    ax.clabel(isolines, levels[::4], inline=True, fontsize=7, fmt="%.2f")
 
-    cbar = fig.colorbar(cf, ax=ax, label="Factor of Safety (FoS)")
+    cbar = fig.colorbar(contour, ax=ax, label="Factor of Safety (FoS)")
     cbar.ax.tick_params(labelsize=8)
 
-    # Mark critical circle centre
-    ax.plot(crit.cx, crit.cy, "r*", markersize=14, zorder=5,
-            label=f"Critical: FoS={result.best_fos_result.fos:.4f}")
+    crit = search_result.critical_circle
+    label = f"Critical: FoS={search_result.best_fos_result.fos:.4f}"
+    ax.plot(crit.cx, crit.cy, "r*", markersize=14, zorder=5, label=label)
     ax.plot(crit.cx, crit.cy, "k+", markersize=8, markeredgewidth=1.5, zorder=6)
 
-    # FoS=1.0 contour highlighted
     try:
-        cs1 = ax.contour(CX, CY, masked, levels=[1.0],
-                         colors="red", linewidths=1.5, linestyles="--")
+        cs1 = ax.contour(cx_mesh, cy_mesh, masked, levels=[1.0], colors="red", linewidths=1.5, linestyles="--")
         ax.clabel(cs1, fmt="FoS=1.0", fontsize=8)
-    except Exception:
+    except ValueError:
         pass
 
     ax.set_xlabel("Circle centre x (m)", fontsize=9)
@@ -128,25 +94,15 @@ def plot_fos_heatmap(
 
 
 def save_fos_heatmap(
-    slope       : SlopeGeometry,
-    soil        : Soil,
-    result      : SearchResult,
-    filepath    : str,
-    title       : str = "FoS Heatmap — Bishop Simplified",
-    dpi         : int = 150,
+    slope: SlopeGeometry,
+    soil_or_result,
+    result: SearchResult | None = None,
+    filepath: str = "",
+    title: str = "FoS Heatmap - Bishop Simplified",
+    dpi: int = 150,
     **kwargs,
 ) -> None:
-    """
-    Convenience wrapper: renders FoS heatmap and saves to a file.
-
-    :param slope:    SlopeGeometry.
-    :param soil:     Soil object.
-    :param result:   SearchResult (critical circle).
-    :param filepath: Output path (PNG, PDF, SVG etc.).
-    :param title:    Figure title.
-    :param dpi:      Resolution.
-    :param kwargs:   Passed to plot_fos_heatmap().
-    """
-    fig = plot_fos_heatmap(slope, soil, result, title=title, **kwargs)
+    """Render a FoS heatmap and save it to disk."""
+    fig = plot_fos_heatmap(slope, soil_or_result, result=result, title=title, **kwargs)
     fig.savefig(filepath, dpi=dpi, bbox_inches="tight")
     plt.close(fig)

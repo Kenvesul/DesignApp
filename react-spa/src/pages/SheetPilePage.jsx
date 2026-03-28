@@ -42,7 +42,7 @@ export default function SheetPilePage() {
       ...form,
       phi_k: +form.phi_k, c_k: +(form.c_k||0), gamma: +form.gamma,
       h_retained: +form.h_retain, delta_deg: +(form.delta_deg||0),
-      surcharge_kpa: +(form.surcharge_kpa||0),
+      q: +(form.surcharge_kpa||0),
     };
     try {
       const resp = await fetch("/api/sheet-pile/analyse", {
@@ -92,7 +92,7 @@ export default function SheetPilePage() {
             <InputField label="h_retain (retained height)" name="h_retain" value={form.h_retain} onChange={e => set("h_retain",e.target.value)} type="number" unit="m" required min={0.5} step={0.1} />
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Support type</label>
-              <select value={form.prop_type} onChange={e => set("prop_type",e.target.value)} className="input text-sm">
+              <select name="prop_type" value={form.prop_type} onChange={e => set("prop_type",e.target.value)} className="input text-sm">
                 <option value="propped_top">Propped at top</option>
                 <option value="cantilever">Cantilever (free)</option>
                 <option value="propped_mid">Propped at mid-height</option>
@@ -132,7 +132,7 @@ function SheetPileResults({ result }) {
     { label: "Prop/anchor force T [kN/m]", c1: c1.T, c2: c2.T },
     { label: "Max bending moment [kN·m/m]", c1: c1.M_max, c2: c2.M_max },
   ];
-  const gov = result.governing_combination || "—";
+  const gov = result.governing || result.governing_combination || "—";
   return (
     <div className="space-y-5">
       <div className="card flex flex-wrap items-center gap-4">

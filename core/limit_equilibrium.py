@@ -39,6 +39,10 @@ import math
 from dataclasses import dataclass, field
 
 
+_MIN_DRIVING_SUM_ABS = 1e-3
+_MIN_DRIVING_WEIGHT_RATIO = 1e-3
+
+
 # ============================================================
 #  Result containers
 # ============================================================
@@ -158,6 +162,31 @@ def _resolve_u_vals(slices, ru: float) -> list[float]:
     ]
 
 
+def _validate_driving_sum(sum_driving: float, total_weight: float, label: str) -> None:
+    """
+    Reject circles that only appear stable because the driving term is
+    numerically or physically negligible.
+    """
+    if sum_driving <= 0:
+        raise ValueError(
+            f"{label} = {sum_driving:.4f} <= 0 - geometry may be invalid "
+            "or all slice bases dip away from the failure direction."
+        )
+
+    if sum_driving <= _MIN_DRIVING_SUM_ABS:
+        raise ValueError(
+            f"{label} = {sum_driving:.6f} is too small for a meaningful "
+            "sliding mass."
+        )
+
+    ratio = sum_driving / max(total_weight, 1e-9)
+    if ratio <= _MIN_DRIVING_WEIGHT_RATIO:
+        raise ValueError(
+            f"{label} / total_weight = {ratio:.6f} is too small for a "
+            "meaningful sliding mass."
+        )
+
+
 # ============================================================
 #  Method 1 – Ordinary Method (Fellenius)
 # ============================================================
@@ -198,6 +227,7 @@ def ordinary_method(
 
     sum_resist  = 0.0
     sum_driving = 0.0
+    total_weight = 0.0
     slice_results: list[SliceResult] = []
 
     u_vals = _resolve_u_vals(slices, ru)
@@ -228,6 +258,7 @@ def ordinary_method(
 
         sum_resist  += resist
         sum_driving += driving
+        total_weight += abs(s.weight)
 
         slice_results.append(SliceResult(
             x             = s.x,
@@ -238,11 +269,7 @@ def ordinary_method(
             denominator   = driving,
         ))
 
-    if sum_driving <= 0:
-        raise ValueError(
-            f"Σ(W·sinα) = {sum_driving:.4f} ≤ 0 — geometry may be invalid "
-            "or all slice bases dip away from the failure direction."
-        )
+    _validate_driving_sum(sum_driving, total_weight, "Σ(W·sinα)")
 
     fos = sum_resist / sum_driving
 
@@ -357,12 +384,8 @@ def bishop_simplified(
         s.weight * math.sin(s.alpha) + kh * s.weight * math.cos(s.alpha)
         for s in slices
     )
-
-    if sum_driving <= 0:
-        raise ValueError(
-            f"Σ(W·sinα + kh·W·cosα) = {sum_driving:.4f} ≤ 0 — geometry may be "
-            "invalid or seismic coefficient too large for this circle."
-        )
+    total_weight = sum(abs(s.weight) for s in slices)
+    _validate_driving_sum(sum_driving, total_weight, "Σ(W·sinα + kh·W·cosα)")
 
     # ── Seed value ────────────────────────────────────────────────────────
     # When slices carry per-slice u values, pass ru=0.0 so ordinary_method
@@ -587,10 +610,8 @@ def spencer_method(
         w * math.sin(a) + kh * w * math.cos(a)
         for w, a in zip(weights, alpha_rad)
     )
-    if sum_W_sina <= 0:
-        raise ValueError(
-            f"Σ(W·sinα + kh·W·cosα) = {sum_W_sina:.4f} ≤ 0 — geometry may be invalid."
-        )
+    total_weight = sum(abs(w) for w in weights)
+    _validate_driving_sum(sum_W_sina, total_weight, "Σ(W·sinα + kh·W·cosα)")
 
     # ── Seed F from Bishop (with same kh/kv) ─────────────────────────────
     _seed_ru = 0.0 if _has_per_slice_u else ru

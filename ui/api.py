@@ -30,6 +30,8 @@ from api import (                           # root api.py  ← sole bridge
     export_wall_pdf,
     export_wall_docx,
     export_wall_plot_png,
+    export_sheet_pile_pdf,
+    export_sheet_pile_docx,
     export_project_pdf,
 
     # Utilities
@@ -56,6 +58,8 @@ __all__ = [
     "export_wall_pdf",
     "export_wall_docx",
     "export_wall_plot_png",
+    "export_sheet_pile_pdf",
+    "export_sheet_pile_docx",
     "export_project_pdf",
     "get_soil_library",
     "validate_slope_params",

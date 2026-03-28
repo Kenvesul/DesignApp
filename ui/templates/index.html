@@ -4,48 +4,48 @@
 
 <div class="hero">
   <h1 class="hero-title">Geotechnical Analysis Suite</h1>
-  <p class="hero-sub">Eurocode 7 · EN 1997-1:2004 · Design Approach 1</p>
+  <p class="hero-sub">Eurocode 7 - EN 1997-1:2004 - Design Approach 1</p>
 </div>
 
 <div class="card-grid">
 
-  <a href="{{ url_for('slope_form') }}" class="analysis-card">
-    <div class="card-icon">⛰</div>
-    <h2>Slope Stability</h2>
-    <p>Bishop's Simplified Method · Critical circle grid search · EC7 DA1 verification</p>
-    <ul class="card-features">
-      <li>Characteristic &amp; design FoS</li>
-      <li>DA1 Combination 1 &amp; 2</li>
-      <li>Cross-section plot + FoS heatmap</li>
-      <li>PDF &amp; Word calculation sheets</li>
-    </ul>
-    <span class="card-cta">Analyse →</span>
-  </a>
-
   <a href="{{ url_for('foundation_form') }}" class="analysis-card">
-    <div class="card-icon">🏗</div>
+    <div class="card-icon">F</div>
     <h2>Foundation Bearing</h2>
-    <p>EC7 Annex D bearing capacity · Immediate settlement · GEO ULS + SLS</p>
+    <p>EC7 Annex D bearing capacity - Immediate settlement - GEO ULS + SLS</p>
     <ul class="card-features">
-      <li>Strip, pad &amp; raft footings</li>
-      <li>Shape &amp; inclination factors</li>
+      <li>Strip, pad and raft footings</li>
+      <li>Shape and inclination factors</li>
       <li>Eccentricity reduction</li>
       <li>Settlement vs allowable</li>
     </ul>
-    <span class="card-cta">Analyse →</span>
+    <span class="card-cta">Analyse -></span>
   </a>
 
   <a href="{{ url_for('wall_form') }}" class="analysis-card">
-    <div class="card-icon">🧱</div>
+    <div class="card-icon">W</div>
     <h2>Retaining Wall</h2>
-    <p>Rankine earth pressures · EC7 DA1 sliding &amp; overturning checks</p>
+    <p>Rankine earth pressures - EC7 DA1 sliding and overturning checks</p>
     <ul class="card-features">
-      <li>Active / passive Ka, Kp</li>
-      <li>Sliding &amp; overturning FoS</li>
+      <li>Active and passive Ka, Kp</li>
+      <li>Sliding and overturning FoS</li>
       <li>Uniform surcharge</li>
       <li>Gravity wall geometry</li>
     </ul>
-    <span class="card-cta">Analyse →</span>
+    <span class="card-cta">Analyse -></span>
+  </a>
+
+  <a href="{{ url_for('sheet_pile_form') }}" class="analysis-card">
+    <div class="card-icon">SP</div>
+    <h2>Sheet Pile</h2>
+    <p>Free-earth support method - embedment depth, prop force and moment.</p>
+    <ul class="card-features">
+      <li>EC7 DA1 combinations</li>
+      <li>Prop and cantilever support modes</li>
+      <li>Pressure diagram outputs</li>
+      <li>PDF and Word calculation sheets</li>
+    </ul>
+    <span class="card-cta">Analyse -></span>
   </a>
 
 </div>
@@ -53,7 +53,7 @@
 <div class="info-banner">
   <strong>DesignApp</strong> is a modular Python geotechnical suite.
   All calculations follow <strong>Eurocode 7 EN 1997-1:2004</strong>.
-  Results are for preliminary design purposes only — verify all inputs before use.
+  Results are for preliminary design purposes only - verify all inputs before use.
 </div>
 
 {% endblock %}

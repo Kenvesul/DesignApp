@@ -789,6 +789,27 @@ def generate_wall_report(
     doc.build(story)
 
 
+def generate_sheet_pile_report(
+    filepath    : str,
+    analysis    : dict,
+    project     : str = "Untitled Project",
+    job_ref     : str = "—",
+    calc_by     : str = "DesignApp",
+    checked_by  : str = "—",
+) -> None:
+    """
+    Minimal standalone PDF calculation sheet for sheet pile analysis.
+
+    Reuses the same section renderer used by the unified project report so the
+    legacy web UI and the React SPA can both export a single sheet-pile report.
+    """
+    st = _styles()
+    today = date.today().strftime("%d %b %Y")
+    _generate_sheet_pile_section(
+        filepath, analysis, project, job_ref, calc_by, checked_by, st, today
+    )
+
+
 # ============================================================
 #  Unified project report  (Sprint 12)
 # ============================================================

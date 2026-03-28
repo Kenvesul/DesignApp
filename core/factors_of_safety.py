@@ -285,6 +285,7 @@ def verify_slope_da1(
     slope      : SlopeGeometry,
     soil       : Soil,
     ru         : float = 0.0,
+    search_zone: dict[str, float | int] | None = None,
     cx_range   : tuple[float, float] | None = None,
     cy_range   : tuple[float, float] | None = None,
     r_range    : tuple[float, float] | None = None,
@@ -340,6 +341,7 @@ def verify_slope_da1(
 
     search_kwargs = dict(
         ru         = ru,
+        search_zone = search_zone,
         cx_range   = cx_range,
         cy_range   = cy_range,
         r_range    = r_range,
